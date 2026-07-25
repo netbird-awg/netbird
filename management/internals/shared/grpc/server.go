@@ -559,12 +559,20 @@ func (s *Server) validateToken(ctx context.Context, peerKey, jwtToken string) (s
 	// we need to call this method because if user is new, we will automatically add it to existing or create a new account
 	accountId, _, err := s.accountManager.GetAccountIDFromUserAuth(ctx, userAuth)
 	if err != nil {
-		return "", status.Errorf(codes.Internal, "unable to fetch account with claims, err: %v", err)
+		return "", mapError(ctx, err)
 	}
 
 	if userAuth.AccountId != accountId {
 		log.WithContext(ctx).Debugf("gRPC server sets accountId from ensure, before %s, now %s", userAuth.AccountId, accountId)
 		userAuth.AccountId = accountId
+	}
+
+	user, err := s.accountManager.GetUserByID(ctx, userAuth.UserId)
+	if err != nil {
+		return "", status.Errorf(codes.Internal, "unable to fetch authenticated user: %v", err)
+	}
+	if user.ForcePasswordChange {
+		return "", status.Error(codes.FailedPrecondition, "password change required before connecting a peer")
 	}
 
 	userAuth, err = s.authManager.EnsureUserAccessByJWTGroups(ctx, userAuth, token)

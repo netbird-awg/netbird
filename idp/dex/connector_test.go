@@ -203,3 +203,40 @@ func TestUpdateConnector_AllowsSameTypeUpdate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(conn.Config, &m))
 	assert.Equal(t, "https://login.microsoftonline.com/new/v2.0", m["issuer"])
 }
+
+func TestLDAPDNComponentsAreEscaped(t *testing.T) {
+	userDN := ldapUserDN("alice,admin", "ou=users,dc=example,dc=com")
+	groupDN := ldapGroupDN("ops+admins", "ou=groups,dc=example,dc=com")
+
+	assert.Equal(t, `uid=alice\,admin,ou=users,dc=example,dc=com`, userDN)
+	assert.Equal(t, `cn=ops\+admins,ou=groups,dc=example,dc=com`, groupDN)
+}
+
+func TestLDAPDialAddress(t *testing.T) {
+	address, serverName, err := ldapDialAddress("ldap.example.com", "636")
+	require.NoError(t, err)
+	assert.Equal(t, "ldap.example.com:636", address)
+	assert.Equal(t, "ldap.example.com", serverName)
+
+	address, serverName, err = ldapDialAddress("2001:db8::1", "636")
+	require.NoError(t, err)
+	assert.Equal(t, "[2001:db8::1]:636", address)
+	assert.Equal(t, "2001:db8::1", serverName)
+
+	_, _, err = ldapDialAddress("ldap://ldap.example.com", "636")
+	require.Error(t, err)
+}
+
+func TestLDAPTLSConfigRejectsInvalidRootCA(t *testing.T) {
+	_, err := ldapTLSConfig(&LDAPConnectorConfig{RootCA: "not a PEM certificate"}, "ldap.example.com")
+	require.Error(t, err)
+}
+
+func TestLDAPUIDFromEmailValidation(t *testing.T) {
+	uid, err := ldapUIDFromEmail("alice@example.com")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", uid)
+
+	_, err = ldapUIDFromEmail("not-an-email")
+	require.Error(t, err)
+}

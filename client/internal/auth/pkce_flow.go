@@ -100,6 +100,10 @@ func NewPKCEAuthorizationFlow(config PKCEAuthProviderConfig) (*PKCEAuthorization
 	excludedRanges := getSystemExcludedPortRanges()
 
 	for _, redirectURL := range config.RedirectURLs {
+		if err := validateLoopbackRedirectURL(redirectURL); err != nil {
+			log.Warnf("skipping unsafe PKCE redirect URL %q: %v", redirectURL, err)
+			continue
+		}
 		if !isRedirectURLPortUsed(redirectURL, excludedRanges) {
 			availableRedirectURL = redirectURL
 			break
@@ -198,7 +202,13 @@ func (p *PKCEAuthorizationFlow) WaitToken(ctx context.Context, info AuthFlowInfo
 		return TokenInfo{}, fmt.Errorf("failed to parse redirect URL: %v", err)
 	}
 
-	server := &http.Server{Addr: fmt.Sprintf(":%s", parsedURL.Port())}
+	server := &http.Server{
+		Addr:              net.JoinHostPort(parsedURL.Hostname(), parsedURL.Port()),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -222,7 +232,13 @@ func (p *PKCEAuthorizationFlow) WaitToken(ctx context.Context, info AuthFlowInfo
 
 func (p *PKCEAuthorizationFlow) startServer(server *http.Server, tokenChan chan<- *oauth2.Token, errChan chan<- error) {
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		setPKCEBrowserSecurityHeaders(w)
+		if req.URL.Path != "/" || req.Method != http.MethodGet {
+			http.NotFound(w, req)
+			return
+		}
 		log.Infof("pkce flow: received authorization callback from IdP")
 		cert := p.providerConfig.ClientCertPair
 		if cert != nil {

@@ -25,6 +25,10 @@ const (
 
 	UserIssuedAPI         = "api"
 	UserIssuedIntegration = "integration"
+
+	MFAPolicyInherit  MFAPolicy = "inherit"
+	MFAPolicyRequired MFAPolicy = "required"
+	MFAPolicyDisabled MFAPolicy = "disabled"
 )
 
 // StrRoleToUserRole returns UserRole for a given strRole or UserRoleUnknown if the specified role is unknown
@@ -53,6 +57,26 @@ type UserStatus string
 // UserRole is the role of a User
 type UserRole string
 
+// MFAPolicy controls native embedded-Dex MFA for an individual user.
+// An empty persisted value is treated as inherit for backward compatibility.
+type MFAPolicy string
+
+func (p MFAPolicy) Normalized() MFAPolicy {
+	if p == "" {
+		return MFAPolicyInherit
+	}
+	return p
+}
+
+func (p MFAPolicy) IsValid() bool {
+	switch p.Normalized() {
+	case MFAPolicyInherit, MFAPolicyRequired, MFAPolicyDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
 type UserInfo struct {
 	ID                   string                                     `json:"id"`
 	Email                string                                     `json:"email"`
@@ -71,6 +95,12 @@ type UserInfo struct {
 	// IdPID is the identity provider ID (connector ID) extracted from the Dex-encoded user ID.
 	// This field is only populated when the user ID can be decoded from Dex's format.
 	IdPID string `json:"idp_id,omitempty"`
+	// LdapGroups are the LDAP group names to add the user to during creation.
+	LdapGroups []string `json:"ldap_groups,omitempty"`
+	// ForcePasswordChange requires the user to change their password on next login.
+	ForcePasswordChange bool `json:"force_password_change,omitempty"`
+	// MFAPolicy controls native embedded-Dex MFA for this user.
+	MFAPolicy MFAPolicy `json:"mfa_policy"`
 }
 
 // User represents a user of the system
@@ -104,6 +134,25 @@ type User struct {
 
 	Name  string `gorm:"default:''"`
 	Email string `gorm:"default:''"`
+
+	// ForcePasswordChange requires the user to change their password on next login
+	ForcePasswordChange bool `gorm:"default:false"`
+	// DirectoryDeletionPending marks a recoverable LDAP deletion saga. The user
+	// is blocked before the upstream directory mutation and removed locally only
+	// after that mutation succeeds.
+	DirectoryDeletionPending bool `gorm:"default:false"`
+	// LDAPSyncBlocked records that the local LDAP synchronization worker owns the
+	// blocked state. It is intentionally internal so an administrator's manual
+	// block is never cleared when a directory user reappears.
+	LDAPSyncBlocked bool `gorm:"default:false"`
+
+	// MFAPolicy controls native embedded-Dex MFA for this user.
+	MFAPolicy          MFAPolicy `gorm:"default:inherit"`
+	MFAPolicyUpdatedAt *time.Time
+	// MFAFailedAttempts and MFALockedUntil persist native TOTP throttling state
+	// without requiring Redis.
+	MFAFailedAttempts int `gorm:"default:0"`
+	MFALockedUntil    *time.Time
 }
 
 // IsBlocked returns true if the user is blocked, false otherwise
@@ -158,17 +207,19 @@ func (u *User) ToUserInfo(userData *idp.UserData) (*UserInfo, error) {
 		}
 
 		return &UserInfo{
-			ID:              u.Id,
-			Email:           u.Email,
-			Name:            name,
-			Role:            string(u.Role),
-			AutoGroups:      u.AutoGroups,
-			Status:          string(UserStatusActive),
-			IsServiceUser:   u.IsServiceUser,
-			IsBlocked:       u.Blocked,
-			LastLogin:       u.GetLastLogin(),
-			Issued:          u.Issued,
-			PendingApproval: u.PendingApproval,
+			ID:                  u.Id,
+			Email:               u.Email,
+			Name:                name,
+			Role:                string(u.Role),
+			AutoGroups:          u.AutoGroups,
+			Status:              string(UserStatusActive),
+			IsServiceUser:       u.IsServiceUser,
+			IsBlocked:           u.Blocked,
+			LastLogin:           u.GetLastLogin(),
+			Issued:              u.Issued,
+			PendingApproval:     u.PendingApproval,
+			ForcePasswordChange: u.ForcePasswordChange,
+			MFAPolicy:           u.MFAPolicy,
 		}, nil
 	}
 	if userData.ID != u.Id {
@@ -181,18 +232,20 @@ func (u *User) ToUserInfo(userData *idp.UserData) (*UserInfo, error) {
 	}
 
 	return &UserInfo{
-		ID:              u.Id,
-		Email:           userData.Email,
-		Name:            userData.Name,
-		Role:            string(u.Role),
-		AutoGroups:      autoGroups,
-		Status:          string(userStatus),
-		IsServiceUser:   u.IsServiceUser,
-		IsBlocked:       u.Blocked,
-		LastLogin:       u.GetLastLogin(),
-		Issued:          u.Issued,
-		PendingApproval: u.PendingApproval,
-		Password:        userData.Password,
+		ID:                  u.Id,
+		Email:               userData.Email,
+		Name:                userData.Name,
+		Role:                string(u.Role),
+		AutoGroups:          autoGroups,
+		Status:              string(userStatus),
+		IsServiceUser:       u.IsServiceUser,
+		IsBlocked:           u.Blocked,
+		LastLogin:           u.GetLastLogin(),
+		Issued:              u.Issued,
+		PendingApproval:     u.PendingApproval,
+		Password:            userData.Password,
+		ForcePasswordChange: u.ForcePasswordChange,
+		MFAPolicy:           u.MFAPolicy,
 	}, nil
 }
 
@@ -205,22 +258,29 @@ func (u *User) Copy() *User {
 		pats[k] = v.Copy()
 	}
 	return &User{
-		Id:                   u.Id,
-		AccountID:            u.AccountID,
-		Role:                 u.Role,
-		AutoGroups:           autoGroups,
-		IsServiceUser:        u.IsServiceUser,
-		NonDeletable:         u.NonDeletable,
-		ServiceUserName:      u.ServiceUserName,
-		PATs:                 pats,
-		Blocked:              u.Blocked,
-		PendingApproval:      u.PendingApproval,
-		LastLogin:            u.LastLogin,
-		CreatedAt:            u.CreatedAt,
-		Issued:               u.Issued,
-		IntegrationReference: u.IntegrationReference,
-		Email:                u.Email,
-		Name:                 u.Name,
+		Id:                       u.Id,
+		AccountID:                u.AccountID,
+		Role:                     u.Role,
+		AutoGroups:               autoGroups,
+		IsServiceUser:            u.IsServiceUser,
+		NonDeletable:             u.NonDeletable,
+		ServiceUserName:          u.ServiceUserName,
+		PATs:                     pats,
+		Blocked:                  u.Blocked,
+		PendingApproval:          u.PendingApproval,
+		LastLogin:                u.LastLogin,
+		CreatedAt:                u.CreatedAt,
+		Issued:                   u.Issued,
+		IntegrationReference:     u.IntegrationReference,
+		Email:                    u.Email,
+		Name:                     u.Name,
+		ForcePasswordChange:      u.ForcePasswordChange,
+		DirectoryDeletionPending: u.DirectoryDeletionPending,
+		LDAPSyncBlocked:          u.LDAPSyncBlocked,
+		MFAPolicy:                u.MFAPolicy,
+		MFAPolicyUpdatedAt:       u.MFAPolicyUpdatedAt,
+		MFAFailedAttempts:        u.MFAFailedAttempts,
+		MFALockedUntil:           u.MFALockedUntil,
 	}
 }
 
@@ -279,7 +339,7 @@ func (u *User) EncryptSensitiveData(enc *crypt.FieldEncrypt) error {
 	return nil
 }
 
-// DecryptSensitiveData decrypts the user's sensitive fields (Email and Name) in place.
+// DecryptSensitiveData decrypts the user's sensitive fields in place.
 func (u *User) DecryptSensitiveData(enc *crypt.FieldEncrypt) error {
 	if enc == nil {
 		return nil

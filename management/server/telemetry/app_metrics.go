@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/gorilla/mux"
 	prometheus2 "github.com/prometheus/client_golang/prometheus"
@@ -203,8 +204,15 @@ func (appMetrics *defaultAppMetrics) Expose(ctx context.Context, port int, endpo
 		return err
 	}
 	appMetrics.listener = listener
+	metricsServer := &http.Server{
+		Handler:           rootRouter,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	go func() {
-		if err := http.Serve(listener, rootRouter); err != nil && err != http.ErrServerClosed {
+		if err := metricsServer.Serve(listener); err != nil && err != http.ErrServerClosed {
 			log.WithContext(ctx).Errorf("metrics server error: %v", err)
 		}
 		log.WithContext(ctx).Info("metrics server stopped")

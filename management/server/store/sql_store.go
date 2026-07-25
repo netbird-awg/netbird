@@ -38,6 +38,10 @@ import (
 	rpservice "github.com/netbirdio/netbird/management/internals/modules/reverseproxy/service"
 	"github.com/netbirdio/netbird/management/internals/modules/zones"
 	"github.com/netbirdio/netbird/management/internals/modules/zones/records"
+	edrmodel "github.com/netbirdio/netbird/management/server/localintegrations/edr/model"
+	eventstreamingmodel "github.com/netbirdio/netbird/management/server/localintegrations/eventstreaming/model"
+	ldapsyncmodel "github.com/netbirdio/netbird/management/server/localintegrations/ldapsync/model"
+	scimmodel "github.com/netbirdio/netbird/management/server/localintegrations/scim/model"
 	resourceTypes "github.com/netbirdio/netbird/management/server/networks/resources/types"
 	routerTypes "github.com/netbirdio/netbird/management/server/networks/routers/types"
 	networkTypes "github.com/netbirdio/netbird/management/server/networks/types"
@@ -142,6 +146,9 @@ func NewSqlStore(ctx context.Context, db *gorm.DB, storeEngine types.Engine, met
 		&agentNetworkTypes.Consumption{}, &agentNetworkTypes.AccountBudgetRule{},
 		&agentNetworkTypes.AgentNetworkAccessLog{}, &agentNetworkTypes.AgentNetworkAccessLogGroup{},
 		&agentNetworkTypes.AgentNetworkUsage{}, &agentNetworkTypes.AgentNetworkUsageGroup{},
+		&ldapsyncmodel.Config{}, &ldapsyncmodel.Run{}, &ldapsyncmodel.Object{},
+		&scimmodel.Integration{}, &scimmodel.Resource{}, &scimmodel.SyncLog{},
+		&eventstreamingmodel.Integration{}, &eventstreamingmodel.Outbox{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("auto migratePreAuto: %w", err)
@@ -393,6 +400,24 @@ func (s *SqlStore) DeleteAccount(ctx context.Context, account *types.Account) er
 	start := time.Now()
 
 	err := s.transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&edrmodel.Bypass{}) {
+			if result := tx.Where("account_id = ?", account.Id).Delete(&edrmodel.Bypass{}); result.Error != nil {
+				return result.Error
+			}
+		}
+
+		if tx.Migrator().HasTable(&edrmodel.Device{}) {
+			if result := tx.Where("account_id = ?", account.Id).Delete(&edrmodel.Device{}); result.Error != nil {
+				return result.Error
+			}
+		}
+
+		if tx.Migrator().HasTable(&edrmodel.Integration{}) {
+			if result := tx.Where("account_id = ?", account.Id).Delete(&edrmodel.Integration{}); result.Error != nil {
+				return result.Error
+			}
+		}
+
 		result := tx.Select(clause.Associations).Delete(account.Policies, "account_id = ?", account.Id)
 		if result.Error != nil {
 			return result.Error

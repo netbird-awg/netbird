@@ -2281,6 +2281,37 @@ func TestDefaultAccountManager_UpdateAccountSettings(t *testing.T) {
 	require.Error(t, err, "expecting to fail when providing PeerLoginExpiration more than 180 days")
 }
 
+func TestUpdateAccountSettingsInvalidatesLocalMFAJWTsInTransaction(t *testing.T) {
+	manager, _, err := createManager(t)
+	require.NoError(t, err)
+	ctx := t.Context()
+	accountID, err := manager.GetAccountIDByUserID(ctx, auth.UserAuth{UserId: userID})
+	require.NoError(t, err)
+
+	localUserID := dex.EncodeDexUserID("local-user", "local")
+	localUser := types.NewRegularUser(localUserID, "local@example.org", "Local User")
+	localUser.AccountID = accountID
+	require.NoError(t, manager.Store.SaveUser(ctx, localUser))
+
+	ldapUserID := dex.EncodeDexUserID("ldap-user", "ldap")
+	ldapUser := types.NewRegularUser(ldapUserID, "ldap@example.org", "LDAP User")
+	ldapUser.AccountID = accountID
+	require.NoError(t, manager.Store.SaveUser(ctx, ldapUser))
+
+	settings, err := manager.Store.GetAccountSettings(ctx, store.LockingStrengthNone, accountID)
+	require.NoError(t, err)
+	settings.LocalMfaEnabled = true
+	_, err = manager.UpdateAccountSettings(ctx, accountID, userID, settings)
+	require.NoError(t, err)
+
+	updatedLocal, err := manager.Store.GetUserByUserID(ctx, store.LockingStrengthNone, localUserID)
+	require.NoError(t, err)
+	require.NotNil(t, updatedLocal.MFAPolicyUpdatedAt)
+	updatedLDAP, err := manager.Store.GetUserByUserID(ctx, store.LockingStrengthNone, ldapUserID)
+	require.NoError(t, err)
+	require.Nil(t, updatedLDAP.MFAPolicyUpdatedAt)
+}
+
 func TestDefaultAccountManager_UpdateAccountSettings_PeerApproval(t *testing.T) {
 	manager, _, account, peer1, peer2, peer3 := setupNetworkMapTest(t)
 

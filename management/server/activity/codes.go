@@ -281,6 +281,15 @@ const (
 	// AccountMetricsPushDisabled indicates that a user disabled metrics push for the account
 	AccountMetricsPushDisabled Activity = 141
 
+	LocalLDAPConnectorTested   Activity = 142
+	LocalLDAPSyncConfigUpdated Activity = 143
+	LocalLDAPSyncPreviewed     Activity = 144
+	LocalLDAPSyncRunCreated    Activity = 145
+	LocalLDAPSyncPaused        Activity = 146
+	LocalLDAPSyncResumed       Activity = 147
+	LocalLDAPSyncRunConfirmed  Activity = 148
+	LocalLDAPSyncRunCancelled  Activity = 149
+
 	AccountDeleted Activity = 99999
 )
 
@@ -456,6 +465,15 @@ var activityMap = map[Activity]Code{
 
 	AccountMetricsPushEnabled:  {"Account metrics push enabled", "account.setting.metrics.push.enable"},
 	AccountMetricsPushDisabled: {"Account metrics push disabled", "account.setting.metrics.push.disable"},
+
+	LocalLDAPConnectorTested:   {"Local LDAP connector tested", "identityprovider.test"},
+	LocalLDAPSyncConfigUpdated: {"Local LDAP sync configuration updated", "local.integration.ldap.sync.config.update"},
+	LocalLDAPSyncPreviewed:     {"Local LDAP sync preview generated", "local.integration.ldap.sync.preview"},
+	LocalLDAPSyncRunCreated:    {"Local LDAP sync run created", "local.integration.ldap.sync.run.create"},
+	LocalLDAPSyncPaused:        {"Local LDAP sync paused", "local.integration.ldap.sync.pause"},
+	LocalLDAPSyncResumed:       {"Local LDAP sync resumed", "local.integration.ldap.sync.resume"},
+	LocalLDAPSyncRunConfirmed:  {"Local LDAP high-risk sync run confirmed", "local.integration.ldap.sync.run.confirm"},
+	LocalLDAPSyncRunCancelled:  {"Local LDAP sync run cancelled", "local.integration.ldap.sync.run.cancel"},
 
 	DomainAdded:     {"Domain added", "domain.add"},
 	DomainDeleted:   {"Domain deleted", "domain.delete"},

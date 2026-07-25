@@ -2,7 +2,7 @@ FROM golang:1.25-bookworm AS builder
 WORKDIR /app
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y gcc libc6-dev git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev git && rm -rf /var/lib/apt/lists/*
 
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
@@ -12,18 +12,20 @@ COPY . .
 # Build with version info from git (matching goreleaser ldflags).
 # BuildKit cache mounts persist the module + build caches across image builds,
 # so a source change recompiles incrementally instead of from scratch.
+ARG NETBIRD_VERSION=development
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=1 GOOS=linux go build \
     -ldflags="-s -w \
-    -X github.com/netbirdio/netbird/version.version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') \
+    -X github.com/netbirdio/netbird/version.version=${NETBIRD_VERSION} \
     -X main.commit=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') \
     -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
     -X main.builtBy=docker" \
     -o netbird-server ./combined
 
 FROM ubuntu:24.04
-RUN apt update && apt install -y ca-certificates && rm -fr /var/cache/apt
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 ENTRYPOINT [ "/go/bin/netbird-server" ]
 CMD ["--config", "/etc/netbird/config.yaml"]
 COPY --from=builder /app/netbird-server /go/bin/netbird-server

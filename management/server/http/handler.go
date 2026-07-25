@@ -97,12 +97,13 @@ func NewAPIHandler(ctx context.Context, router *mux.Router, accountManager accou
 		appMetrics.GetMeter(),
 		isValidChildAccount,
 	)
+	forcePasswordChangeMiddleware := middleware.NewForcePasswordChangeMiddleware(accountManager.GetStore())
 
 	corsMiddleware := cors.AllowAll()
 
 	metricsMiddleware := appMetrics.HTTPMiddleware()
 
-	router.Use(metricsMiddleware.Handler, corsMiddleware.Handler, authMiddleware.Handler)
+	router.Use(metricsMiddleware.Handler, corsMiddleware.Handler, authMiddleware.Handler, forcePasswordChangeMiddleware.Handler)
 
 	instanceManager, err := nbinstance.NewManager(ctx, accountManager.GetStore(), idpManager)
 	if err != nil {

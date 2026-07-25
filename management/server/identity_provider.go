@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/dexidp/dex/storage"
 	"github.com/rs/xid"
@@ -17,8 +16,10 @@ import (
 	"github.com/netbirdio/netbird/idp/dex"
 	"github.com/netbirdio/netbird/management/server/activity"
 	"github.com/netbirdio/netbird/management/server/idp"
+	"github.com/netbirdio/netbird/management/server/outbound"
 	"github.com/netbirdio/netbird/management/server/permissions/modules"
 	"github.com/netbirdio/netbird/management/server/permissions/operations"
+	"github.com/netbirdio/netbird/management/server/store"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/shared/management/status"
 )
@@ -33,28 +34,47 @@ type oidcProviderJSON struct {
 func validateOIDCIssuer(ctx context.Context, issuer string) error {
 	wellKnown := strings.TrimSuffix(issuer, "/") + "/.well-known/openid-configuration"
 
-	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
+	validator, err := outbound.NewValidatorFromEnv()
+	if err != nil {
+		return fmt.Errorf("%w: invalid outbound allowlist: %v", types.ErrIdentityProviderIssuerUnreachable, err)
 	}
+	target, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
+	if err != nil {
+		return fmt.Errorf("%w: %v", types.ErrIdentityProviderIssuerUnreachable, err)
+	}
+	if _, err := validator.ValidateURL(ctx, target.URL); err != nil {
+		return fmt.Errorf("%w: %v", types.ErrIdentityProviderIssuerUnreachable, err)
+	}
+	return validateOIDCIssuerWithHTTPClient(ctx, issuer, validator.HTTPClient())
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
+// validateOIDCIssuerWithHTTPClient performs discovery-document validation with
+// a caller-provided client. Production callers must use validateOIDCIssuer so
+// outbound destination validation and DNS pinning cannot be bypassed.
+func validateOIDCIssuerWithHTTPClient(ctx context.Context, issuer string, httpClient *http.Client) error {
+	wellKnown := strings.TrimSuffix(issuer, "/") + "/.well-known/openid-configuration"
+	target, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", types.ErrIdentityProviderIssuerUnreachable, err)
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Do(target)
 	if err != nil {
 		return fmt.Errorf("%w: %v", types.ErrIdentityProviderIssuerUnreachable, err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	const maxOIDCDiscoveryBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxOIDCDiscoveryBytes+1))
 	if err != nil {
 		return fmt.Errorf("%w: unable to read response body: %v", types.ErrIdentityProviderIssuerUnreachable, err)
 	}
+	if len(body) > maxOIDCDiscoveryBytes {
+		return fmt.Errorf("%w: discovery response exceeds %d bytes", types.ErrIdentityProviderIssuerUnreachable, maxOIDCDiscoveryBytes)
+	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%w: %s: %s", types.ErrIdentityProviderIssuerUnreachable, resp.Status, body)
+		return fmt.Errorf("%w: discovery endpoint returned %s", types.ErrIdentityProviderIssuerUnreachable, resp.Status)
 	}
 
 	var p oidcProviderJSON
@@ -74,6 +94,11 @@ func validateOIDCIssuer(ctx context.Context, issuer string) error {
 func validateIdentityProviderConfig(ctx context.Context, idpConfig *types.IdentityProvider) error {
 	if err := idpConfig.Validate(); err != nil {
 		return status.Errorf(status.InvalidArgument, "%s", err.Error())
+	}
+
+	// LDAP connectors don't use OIDC discovery
+	if idpConfig.Type == types.IdentityProviderTypeLDAP {
+		return nil
 	}
 
 	// Validate the issuer by calling the OIDC discovery endpoint
@@ -109,6 +134,13 @@ func (am *DefaultAccountManager) GetIdentityProviders(ctx context.Context, accou
 
 	result := make([]*types.IdentityProvider, 0, len(connectors))
 	for _, conn := range connectors {
+		visible, err := am.ensureIdentityProviderAccount(ctx, embeddedManager, accountID, conn)
+		if err != nil {
+			return nil, err
+		}
+		if !visible {
+			continue
+		}
 		result = append(result, connectorConfigToIdentityProvider(conn, accountID))
 	}
 
@@ -130,12 +162,9 @@ func (am *DefaultAccountManager) GetIdentityProvider(ctx context.Context, accoun
 		return nil, status.Errorf(status.Internal, "identity provider management requires embedded IdP")
 	}
 
-	conn, err := embeddedManager.GetConnector(ctx, idpID)
+	conn, err := am.getIdentityProviderConnector(ctx, embeddedManager, accountID, idpID)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return nil, status.Errorf(status.NotFound, "identity provider not found")
-		}
-		return nil, status.Errorf(status.Internal, "failed to get identity provider: %v", err)
+		return nil, err
 	}
 
 	return connectorConfigToIdentityProvider(conn, accountID), nil
@@ -196,6 +225,9 @@ func (am *DefaultAccountManager) UpdateIdentityProvider(ctx context.Context, acc
 	if !ok {
 		return nil, status.Errorf(status.Internal, "identity provider management requires embedded IdP")
 	}
+	if _, err := am.getIdentityProviderConnector(ctx, embeddedManager, accountID, idpID); err != nil {
+		return nil, err
+	}
 
 	idpConfig.ID = idpID
 	idpConfig.AccountID = accountID
@@ -227,14 +259,14 @@ func (am *DefaultAccountManager) DeleteIdentityProvider(ctx context.Context, acc
 	}
 
 	// Get the IDP info before deleting for the activity event
-	conn, err := embeddedManager.GetConnector(ctx, idpID)
+	conn, err := am.getIdentityProviderConnector(ctx, embeddedManager, accountID, idpID)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return status.Errorf(status.NotFound, "identity provider not found")
-		}
-		return status.Errorf(status.Internal, "failed to get identity provider: %v", err)
+		return err
 	}
 	idpConfig := connectorConfigToIdentityProvider(conn, accountID)
+	if err := am.ensureIdentityProviderNotReferenced(ctx, accountID, idpID); err != nil {
+		return err
+	}
 
 	if err := embeddedManager.DeleteConnector(ctx, idpID); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
@@ -248,9 +280,47 @@ func (am *DefaultAccountManager) DeleteIdentityProvider(ctx context.Context, acc
 	return nil
 }
 
+type ldapSyncConfigReferenceChecker interface {
+	HasLDAPSyncConfig(ctx context.Context, accountID, connectorID string) (bool, error)
+}
+
+func (am *DefaultAccountManager) ensureIdentityProviderNotReferenced(ctx context.Context, accountID, idpID string) error {
+	users, err := am.Store.GetAccountUsers(ctx, store.LockingStrengthNone, accountID)
+	if err != nil {
+		return status.Errorf(status.Internal, "failed to check identity provider references")
+	}
+	for _, user := range users {
+		_, connectorID, decodeErr := dex.DecodeDexUserID(user.Id)
+		if decodeErr == nil && connectorID == idpID {
+			return status.Errorf(status.PreconditionFailed, "identity provider is still referenced by user %s", user.Id)
+		}
+	}
+
+	invites, err := am.Store.GetAccountUserInvites(ctx, store.LockingStrengthNone, accountID)
+	if err != nil {
+		return status.Errorf(status.Internal, "failed to check identity provider invitations")
+	}
+	for _, invite := range invites {
+		if invite.IdpID == idpID {
+			return status.Errorf(status.PreconditionFailed, "identity provider is still referenced by a pending user")
+		}
+	}
+
+	if checker, ok := am.Store.(ldapSyncConfigReferenceChecker); ok {
+		referenced, err := checker.HasLDAPSyncConfig(ctx, accountID, idpID)
+		if err != nil {
+			return status.Errorf(status.Internal, "failed to check LDAP synchronization references")
+		}
+		if referenced {
+			return status.Errorf(status.PreconditionFailed, "identity provider is still referenced by local LDAP synchronization")
+		}
+	}
+	return nil
+}
+
 // connectorConfigToIdentityProvider converts a dex.ConnectorConfig to types.IdentityProvider
 func connectorConfigToIdentityProvider(conn *dex.ConnectorConfig, accountID string) *types.IdentityProvider {
-	return &types.IdentityProvider{
+	identityProvider := &types.IdentityProvider{
 		ID:           conn.ID,
 		AccountID:    accountID,
 		Type:         types.IdentityProviderType(conn.Type),
@@ -259,18 +329,61 @@ func connectorConfigToIdentityProvider(conn *dex.ConnectorConfig, accountID stri
 		ClientID:     conn.ClientID,
 		ClientSecret: conn.ClientSecret,
 	}
+	applyLDAPConnectorConfig(identityProvider, conn.LDAP)
+	return identityProvider
 }
 
 // identityProviderToConnectorConfig converts a types.IdentityProvider to dex.ConnectorConfig
 func identityProviderToConnectorConfig(idpConfig *types.IdentityProvider) *dex.ConnectorConfig {
-	return &dex.ConnectorConfig{
+	cfg := &dex.ConnectorConfig{
 		ID:           idpConfig.ID,
 		Name:         idpConfig.Name,
 		Type:         string(idpConfig.Type),
 		Issuer:       idpConfig.Issuer,
 		ClientID:     idpConfig.ClientID,
 		ClientSecret: idpConfig.ClientSecret,
+		AccountID:    idpConfig.AccountID,
 	}
+	if idpConfig.Type == types.IdentityProviderTypeLDAP {
+		cfg.LDAP = identityProviderLDAPConnectorConfig(idpConfig)
+	}
+	return cfg
+}
+
+func (am *DefaultAccountManager) getIdentityProviderConnector(ctx context.Context, embeddedManager *idp.EmbeddedIdPManager, accountID, idpID string) (*dex.ConnectorConfig, error) {
+	conn, err := embeddedManager.GetConnector(ctx, idpID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil, status.Errorf(status.NotFound, "identity provider not found")
+		}
+		return nil, status.Errorf(status.Internal, "failed to get identity provider: %v", err)
+	}
+	visible, err := am.ensureIdentityProviderAccount(ctx, embeddedManager, accountID, conn)
+	if err != nil {
+		return nil, err
+	}
+	if !visible {
+		return nil, status.Errorf(status.NotFound, "identity provider not found")
+	}
+	return conn, nil
+}
+
+// ensureIdentityProviderAccount isolates embedded Dex connectors by NetBird
+// account. Legacy/static connectors without ownership are claimed only when
+// the installation contains exactly one account, avoiding cross-tenant leaks.
+func (am *DefaultAccountManager) ensureIdentityProviderAccount(ctx context.Context, embeddedManager *idp.EmbeddedIdPManager, accountID string, conn *dex.ConnectorConfig) (bool, error) {
+	if conn.AccountID != "" {
+		return conn.AccountID == accountID, nil
+	}
+	accounts := am.Store.GetAllAccounts(ctx)
+	if len(accounts) != 1 || accounts[0].Id != accountID {
+		return false, nil
+	}
+	conn.AccountID = accountID
+	if err := embeddedManager.UpdateConnector(ctx, conn); err != nil {
+		return false, status.Errorf(status.Internal, "failed to claim legacy identity provider: %v", err)
+	}
+	return true, nil
 }
 
 // generateIdentityProviderID generates a unique ID for an identity provider.
@@ -298,6 +411,8 @@ func generateIdentityProviderID(idpType types.IdentityProviderType) string {
 		return "keycloak-" + id
 	case types.IdentityProviderTypeADFS:
 		return "adfs-" + id
+	case types.IdentityProviderTypeLDAP:
+		return "ldap-" + id
 	default:
 		// Generic OIDC - no prefix
 		return id

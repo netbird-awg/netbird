@@ -36,6 +36,8 @@ tags:
     x-cloud-only: true
   - name: Identity Providers
     description: Interact with and view information about identity providers.
+  - name: Local LDAP Integrations
+    description: Configure and operate self-hosted OpenLDAP synchronization.
   - name: Services
     description: Interact with and view information about reverse proxy services.
   - name: Instance
@@ -522,6 +524,15 @@ components:
           description: Identity provider ID (connector ID) that the user authenticated with. Only populated for users with Dex-encoded user IDs.
           type: string
           example: okta-abc123
+        force_password_change:
+          description: Is true if this user must change their password before accessing the system.
+          type: boolean
+          example: false
+        mfa_policy:
+          description: Controls native embedded IdP MFA for this user. Inherit uses the account default for local users; required and disabled override it.
+          type: string
+          enum: [ "inherit", "required", "disabled" ]
+          example: inherit
         permissions:
           $ref: '#/components/schemas/UserPermissions'
       required:
@@ -533,6 +544,8 @@ components:
         - status
         - is_blocked
         - pending_approval
+        - force_password_change
+        - mfa_policy
     UserPermissions:
       type: object
       properties:
@@ -572,6 +585,11 @@ components:
           description: If set to true then user is blocked and can't use the system
           type: boolean
           example: false
+        mfa_policy:
+          description: Controls native embedded IdP MFA for this user. Omit to keep the current policy.
+          type: string
+          enum: [ "inherit", "required", "disabled" ]
+          example: inherit
       required:
         - role
         - auto_groups
@@ -601,6 +619,10 @@ components:
           description: Is true if this user is a service user
           type: boolean
           example: false
+        idp_id:
+          description: Identity provider connector ID for external authentication (for example, LDAP). When set, the user is pre-registered for external IdP login.
+          type: string
+          example: ldap-corporate
       required:
         - role
         - auto_groups
@@ -631,6 +653,24 @@ components:
           description: Invite expiration time in seconds (default 72 hours)
           type: integer
           example: 259200
+        idp_id:
+          description: Identity provider connector ID. When set, the user is created in the external identity provider and pre-registered for auto-approval.
+          type: string
+          example: ldap-corporate
+        password:
+          description: User password. Required when idp_id is set for an external identity provider that supports user creation.
+          type: string
+          format: password
+        force_password_change:
+          description: Require the user to change their password on first login.
+          type: boolean
+          example: true
+        ldap_groups:
+          description: Additional LDAP group names to add the user to. The mandatory netbird group is always included, and missing groups are created when supported by the connector.
+          type: array
+          x-go-type-skip-optional-pointer: true
+          items:
+            type: string
       required:
         - email
         - name
@@ -680,6 +720,10 @@ components:
           description: The invite link to be shared with the user. Only returned when the invite is created or regenerated.
           type: string
           example: nbi_Xk5Lz9mP2vQwRtYu1aN3bC4dE5fGh0ABC123
+        idp_id:
+          description: Identity provider connector ID for an external IdP pre-registration.
+          type: string
+          example: ldap-corporate
       required:
         - id
         - email
@@ -2994,6 +3038,7 @@ components:
         - pocketid
         - microsoft
         - adfs
+        - ldap
       example: oidc
     IdentityProvider:
       type: object
@@ -3016,6 +3061,13 @@ components:
           description: OAuth2 client ID
           type: string
           example: 123456789.apps.googleusercontent.com
+        secret_configured:
+          description: Whether the connector has a stored client or LDAP bind secret. The secret value is never returned.
+          type: boolean
+          x-go-type-skip-optional-pointer: true
+        ldap:
+          description: LDAP connector configuration. Only used when type is ldap.
+          $ref: '#/components/schemas/IdentityProviderLDAP'
       required:
         - type
         - name
@@ -3042,12 +3094,289 @@ components:
           description: OAuth2 client secret
           type: string
           example: secret123
+        ldap:
+          description: LDAP connector configuration. Only used when type is ldap.
+          $ref: '#/components/schemas/IdentityProviderLDAP'
       required:
         - type
         - name
         - issuer
         - client_id
         - client_secret
+    IdentityProviderLDAP:
+      type: object
+      description: LDAP connector configuration for an identity provider.
+      properties:
+        host:
+          description: LDAP server host and port, for example ldap.example.com:636.
+          type: string
+        insecure_no_ssl:
+          description: Connect over plaintext TCP. Intended only for explicitly trusted local development environments.
+          type: boolean
+          x-go-name: InsecureNoSSL
+          x-go-type-skip-optional-pointer: true
+        insecure_skip_verify:
+          description: Skip TLS certificate verification. This weakens transport security and should only be used temporarily for local development.
+          type: boolean
+          x-go-type-skip-optional-pointer: true
+        start_tls:
+          description: Connect over TCP and upgrade the connection with StartTLS.
+          type: boolean
+          x-go-name: StartTLS
+          x-go-type-skip-optional-pointer: true
+        root_ca:
+          description: PEM-encoded root CA certificate used to verify the LDAP server certificate.
+          type: string
+          x-go-name: RootCA
+          x-go-type-skip-optional-pointer: true
+        bind_dn:
+          description: Distinguished name used to bind to the LDAP server.
+          type: string
+          x-go-name: BindDN
+        bind_pw:
+          description: Password for the bind DN.
+          type: string
+          format: password
+          x-go-name: BindPW
+          x-go-type-skip-optional-pointer: true
+        user_search_base_dn:
+          description: Base DN for user searches.
+          type: string
+          x-go-name: UserSearchBaseDN
+        user_search_filter:
+          description: Optional LDAP filter applied to user searches.
+          type: string
+          x-go-type-skip-optional-pointer: true
+        user_search_username:
+          description: Attribute used as the login username.
+          type: string
+          x-go-type-skip-optional-pointer: true
+        user_search_id_attr:
+          description: Attribute used as the stable user ID.
+          type: string
+          x-go-name: UserSearchIDAttr
+          x-go-type-skip-optional-pointer: true
+        user_search_email_attr:
+          description: Attribute used as the user email address.
+          type: string
+          x-go-type-skip-optional-pointer: true
+        user_search_name_attr:
+          description: Attribute used as the display name.
+          type: string
+          x-go-type-skip-optional-pointer: true
+        group_search_base_dn:
+          description: Base DN for group searches.
+          type: string
+          x-go-name: GroupSearchBaseDN
+          x-go-type-skip-optional-pointer: true
+        group_search_filter:
+          description: Optional LDAP filter applied to group searches.
+          type: string
+          x-go-type-skip-optional-pointer: true
+        group_search_user_attr:
+          description: User attribute matched against group membership.
+          type: string
+          x-go-type-skip-optional-pointer: true
+        group_search_group_attr:
+          description: Group attribute that contains member references.
+          type: string
+          x-go-type-skip-optional-pointer: true
+        group_search_name_attr:
+          description: Attribute used as the group name.
+          type: string
+          x-go-type-skip-optional-pointer: true
+        required_groups:
+          description: Restrict login to users in at least one of these groups.
+          type: array
+          x-go-type-skip-optional-pointer: true
+          items:
+            type: string
+      required:
+        - host
+        - bind_dn
+        - user_search_base_dn
+    LDAPConnectorTestResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [pending, ok, skipped, failed]
+        latency_ms:
+          type: integer
+          format: int64
+        tested_at:
+          type: string
+          format: date-time
+      required: [status, checks, latency_ms, tested_at]
+    LocalLDAPSyncGroupMapping:
+      type: object
+      properties:
+        ldap_group:
+          type: string
+        netbird_auto_group_ids:
+          type: array
+          items:
+            type: string
+      required: [ldap_group, netbird_auto_group_ids]
+    LocalLDAPSyncConfigRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        interval_minutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+        sync_scope_groups:
+          type: array
+          items:
+            type: string
+        group_mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalLDAPSyncGroupMapping'
+        deprovision_action:
+          type: string
+          enum: [disable, ignore]
+        conflict_policy:
+          type: string
+          enum: [skip]
+        revision:
+          type: integer
+          format: int64
+          description: Current revision. Use zero when creating the configuration.
+        allow_without_default_scope:
+          type: boolean
+          description: Explicit high-risk acknowledgement when the netbird LDAP group is not in scope.
+      required: [enabled, interval_minutes, sync_scope_groups, group_mappings, deprovision_action, conflict_policy, revision]
+    LocalLDAPSyncConfig:
+      allOf:
+        - $ref: '#/components/schemas/LocalLDAPSyncConfigRequest'
+        - type: object
+          properties:
+            id:
+              type: integer
+              format: int64
+            account_id:
+              type: string
+            connector_id:
+              type: string
+            failure_count:
+              type: integer
+            paused_reason:
+              type: string
+            next_run_at:
+              type: string
+              format: date-time
+            last_success_at:
+              type: string
+              format: date-time
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+          required: [id, account_id, connector_id, failure_count, created_at, updated_at]
+    LocalLDAPSyncPreviewCounts:
+      type: object
+      properties:
+        created: { type: integer }
+        updated: { type: integer }
+        disabled: { type: integer }
+        unchanged: { type: integer }
+        skipped: { type: integer }
+        conflicts: { type: integer }
+      required: [created, updated, disabled, unchanged, skipped, conflicts]
+    LocalLDAPSyncPreviewSample:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [create, update, disable, skipped, conflict]
+        external_id_hash:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        reason:
+          type: string
+      required: [action, external_id_hash]
+    LocalLDAPSyncPreview:
+      type: object
+      properties:
+        counts:
+          $ref: '#/components/schemas/LocalLDAPSyncPreviewCounts'
+        samples:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/LocalLDAPSyncPreviewSample'
+        source_fingerprint:
+          type: string
+        high_risk:
+          type: boolean
+        high_risk_reason:
+          type: string
+        confirmation_token:
+          type: string
+        confirmation_expires_at:
+          type: string
+          format: date-time
+      required: [counts, samples, source_fingerprint, high_risk]
+    LocalLDAPSyncRunRequest:
+      type: object
+      properties:
+        confirmation_token:
+          type: string
+    LocalLDAPSyncRun:
+      type: object
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        connector_id: { type: string }
+        status:
+          type: string
+          enum: [queued, awaiting_approval, running, success, partial, failed, cancelled]
+        trigger:
+          type: string
+          enum: [manual, scheduled, initial]
+        initiated_by: { type: string }
+        config_revision: { type: integer, format: int64 }
+        source_fingerprint: { type: string }
+        queued_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        attempt: { type: integer }
+        created_count: { type: integer }
+        updated_count: { type: integer }
+        disabled_count: { type: integer }
+        skipped_count: { type: integer }
+        conflict_count: { type: integer }
+        error_count: { type: integer }
+        error_code: { type: string }
+        error_summary: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      required: [id, account_id, connector_id, status, trigger, config_revision, queued_at, attempt, created_count, updated_count, disabled_count, skipped_count, conflict_count, error_count, created_at, updated_at]
+    LocalLDAPSyncRunList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalLDAPSyncRun'
+        total: { type: integer, format: int64 }
+        offset: { type: integer }
+        limit: { type: integer }
+      required: [items, total, offset, limit]
     Service:
       type: object
       properties:
@@ -4097,7 +4426,7 @@ components:
           example: { "api_key": "****", "site": "datadoghq.com", "region": "us-east-1" }
     EDRIntuneRequest:
       type: object
-      description: "Request payload for creating or updating a EDR Intune integration."
+      description: "Request payload for creating an EDR Intune integration."
       required:
         - client_id
         - tenant_id
@@ -4127,6 +4456,30 @@ components:
           type: boolean
           description: Indicates whether the integration is enabled
           default: true
+    EDRIntuneUpdateRequest:
+      type: object
+      description: Request payload for updating an EDR Intune integration. Omit secret to preserve the stored value.
+      required:
+        - client_id
+        - tenant_id
+        - groups
+        - last_synced_interval
+      properties:
+        client_id:
+          type: string
+        tenant_id:
+          type: string
+        secret:
+          type: string
+        groups:
+          type: array
+          items:
+            type: string
+        last_synced_interval:
+          type: integer
+          minimum: 24
+        enabled:
+          type: boolean
     EDRIntuneResponse:
       type: object
       description: Represents a Intune EDR integration configuration
@@ -4134,7 +4487,6 @@ components:
         - id
         - account_id
         - created_by
-        - last_synced_at
         - created_at
         - updated_at
         - client_id
@@ -4156,8 +4508,12 @@ components:
         last_synced_at:
           type: string
           format: date-time
+          nullable: true
           description: Timestamp of when the integration was last synced.
           example: "2023-05-15T10:30:00Z"
+        last_error:
+          type: string
+          description: Most recent synchronization error, omitted after a successful sync.
         created_by:
           type: string
           description: The user id that created the integration
@@ -4192,7 +4548,7 @@ components:
           description: Indicates whether the integration is enabled
     EDRSentinelOneRequest:
       type: object
-      description: Request payload for creating or updating a EDR SentinelOne integration
+      description: Request payload for creating an EDR SentinelOne integration
       properties:
         api_token:
           type: string
@@ -4221,6 +4577,30 @@ components:
         - groups
         - last_synced_interval
         - match_attributes
+    EDRSentinelOneUpdateRequest:
+      type: object
+      description: Request payload for updating an EDR SentinelOne integration. Omit api_token to preserve the stored value.
+      properties:
+        api_token:
+          type: string
+        api_url:
+          type: string
+        groups:
+          type: array
+          items:
+            type: string
+        last_synced_interval:
+          type: integer
+          minimum: 24
+        enabled:
+          type: boolean
+        match_attributes:
+          $ref: '#/components/schemas/SentinelOneMatchAttributes'
+      required:
+        - api_url
+        - groups
+        - last_synced_interval
+        - match_attributes
     EDRSentinelOneResponse:
       type: object
       description: Represents a SentinelOne EDR integration configuration
@@ -4228,7 +4608,6 @@ components:
         - id
         - account_id
         - created_by
-        - last_synced_at
         - created_at
         - updated_at
         - api_url
@@ -4249,8 +4628,12 @@ components:
         last_synced_at:
           type: string
           format: date-time
+          nullable: true
           description: Timestamp of when the integration was last synced.
           example: "2023-05-15T10:30:00Z"
+        last_error:
+          type: string
+          description: Most recent synchronization error, omitted after a successful sync.
         created_by:
           type: string
           description: The user id that created the integration
@@ -4314,7 +4697,7 @@ components:
 
     EDRFalconRequest:
       type: object
-      description: Request payload for creating or updating a EDR Falcon integration
+      description: Request payload for creating an EDR Falcon integration
       properties:
         client_id:
           type: string
@@ -4346,13 +4729,36 @@ components:
         - cloud_id
         - groups
         - zta_score_threshold
+    EDRFalconUpdateRequest:
+      type: object
+      description: Request payload for updating an EDR Falcon integration. Omit client_id and secret to preserve their stored values.
+      properties:
+        client_id:
+          type: string
+        secret:
+          type: string
+        cloud_id:
+          type: string
+        groups:
+          type: array
+          items:
+            type: string
+        zta_score_threshold:
+          type: integer
+          minimum: 0
+          maximum: 100
+        enabled:
+          type: boolean
+      required:
+        - cloud_id
+        - groups
+        - zta_score_threshold
     EDRFalconResponse:
       type: object
       description: Represents a Falcon EDR integration
       required:
         - id
         - account_id
-        - last_synced_at
         - created_by
         - created_at
         - updated_at
@@ -4373,8 +4779,12 @@ components:
         last_synced_at:
           type: string
           format: date-time
+          nullable: true
           description: Timestamp of when the integration was last synced.
           example: "2023-05-15T10:30:00Z"
+        last_error:
+          type: string
+          description: Most recent synchronization error, omitted after a successful sync.
         created_by:
           type: string
           description: The user id that created the integration
@@ -4405,7 +4815,7 @@ components:
 
     EDRHuntressRequest:
       type: object
-      description: Request payload for creating or updating a EDR Huntress integration
+      description: Request payload for creating an EDR Huntress integration
       properties:
         api_key:
           type: string
@@ -4434,6 +4844,29 @@ components:
         - groups
         - last_synced_interval
         - match_attributes
+    EDRHuntressUpdateRequest:
+      type: object
+      description: Request payload for updating an EDR Huntress integration. Omit api_key and api_secret to preserve stored values.
+      properties:
+        api_key:
+          type: string
+        api_secret:
+          type: string
+        groups:
+          type: array
+          items:
+            type: string
+        last_synced_interval:
+          type: integer
+          minimum: 24
+        enabled:
+          type: boolean
+        match_attributes:
+          $ref: '#/components/schemas/HuntressMatchAttributes'
+      required:
+        - groups
+        - last_synced_interval
+        - match_attributes
     EDRHuntressResponse:
       type: object
       description: Represents a Huntress EDR integration configuration
@@ -4441,7 +4874,6 @@ components:
         - id
         - account_id
         - created_by
-        - last_synced_at
         - created_at
         - updated_at
         - groups
@@ -4461,8 +4893,12 @@ components:
         last_synced_at:
           type: string
           format: date-time
+          nullable: true
           description: Timestamp of when the integration was last synced.
           example: "2023-05-15T10:30:00Z"
+        last_error:
+          type: string
+          description: Most recent synchronization error, omitted after a successful sync.
         created_by:
           type: string
           description: The user id that created the integration
@@ -4515,7 +4951,7 @@ components:
 
     EDRFleetDMRequest:
       type: object
-      description: Request payload for creating or updating a FleetDM EDR integration
+      description: Request payload for creating a FleetDM EDR integration
       properties:
         api_url:
           type: string
@@ -4544,6 +4980,30 @@ components:
         - groups
         - last_synced_interval
         - match_attributes
+    EDRFleetDMUpdateRequest:
+      type: object
+      description: Request payload for updating a FleetDM EDR integration. Omit api_token to preserve the stored value.
+      properties:
+        api_url:
+          type: string
+        api_token:
+          type: string
+        groups:
+          type: array
+          items:
+            type: string
+        last_synced_interval:
+          type: integer
+          minimum: 24
+        enabled:
+          type: boolean
+        match_attributes:
+          $ref: '#/components/schemas/FleetDMMatchAttributes'
+      required:
+        - api_url
+        - groups
+        - last_synced_interval
+        - match_attributes
     EDRFleetDMResponse:
       type: object
       description: Represents a FleetDM EDR integration configuration
@@ -4552,7 +5012,6 @@ components:
         - account_id
         - api_url
         - created_by
-        - last_synced_at
         - created_at
         - updated_at
         - groups
@@ -4575,8 +5034,12 @@ components:
         last_synced_at:
           type: string
           format: date-time
+          nullable: true
           description: Timestamp of when the integration was last synced.
           example: "2023-05-15T10:30:00Z"
+        last_error:
+          type: string
+          description: Most recent synchronization error, omitted after a successful sync.
         created_by:
           type: string
           description: The user id that created the integration
@@ -6225,6 +6688,33 @@ components:
       content: { }
     conflict:
       description: Conflict
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    precondition_failed:
+      description: Operation precondition failed
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    unprocessable_entity:
+      description: Request validation or connector diagnostic failed
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    too_many_requests:
+      description: Request rate limit exceeded
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
@@ -9873,6 +10363,322 @@ paths:
           "$ref": "#/components/responses/forbidden"
         '500':
           "$ref": "#/components/responses/internal_error"
+  /api/identity-providers/{idpId}/test:
+    post:
+      summary: Test a saved LDAP Identity Provider connector
+      operationId: testLDAPIdentityProvider
+      tags: [Identity Providers]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      parameters:
+        - in: path
+          name: idpId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Stage-level LDAP diagnostic result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LDAPConnectorTestResponse'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '404': { "$ref": "#/components/responses/not_found" }
+        '422': { "$ref": "#/components/responses/unprocessable_entity" }
+        '429': { "$ref": "#/components/responses/too_many_requests" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync:
+    get:
+      summary: List local LDAP synchronization configurations
+      operationId: listLocalLDAPSyncConfigs
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      responses:
+        '200':
+          description: Local LDAP synchronization configurations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocalLDAPSyncConfig'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync/{connectorId}:
+    parameters:
+      - in: path
+        name: connectorId
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get a local LDAP synchronization configuration
+      operationId: getLocalLDAPSyncConfig
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      responses:
+        '200':
+          description: Local LDAP synchronization configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncConfig'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '404': { "$ref": "#/components/responses/not_found" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+    put:
+      summary: Create or update a local LDAP synchronization configuration
+      operationId: putLocalLDAPSyncConfig
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalLDAPSyncConfigRequest'
+      responses:
+        '200':
+          description: Saved local LDAP synchronization configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncConfig'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '409': { "$ref": "#/components/responses/conflict" }
+        '412': { "$ref": "#/components/responses/precondition_failed" }
+        '422': { "$ref": "#/components/responses/unprocessable_entity" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync/{connectorId}/preview:
+    post:
+      summary: Preview LDAP synchronization changes without writing them
+      operationId: previewLocalLDAPSync
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      parameters:
+        - in: path
+          name: connectorId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Bounded synchronization preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncPreview'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '404': { "$ref": "#/components/responses/not_found" }
+        '412': { "$ref": "#/components/responses/precondition_failed" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync/{connectorId}/runs:
+    parameters:
+      - in: path
+        name: connectorId
+        required: true
+        schema: { type: string }
+    post:
+      summary: Queue a local LDAP synchronization run
+      operationId: createLocalLDAPSyncRun
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalLDAPSyncRunRequest'
+      responses:
+        '202':
+          description: Queued synchronization run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncRun'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '409': { "$ref": "#/components/responses/conflict" }
+        '412': { "$ref": "#/components/responses/precondition_failed" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+    get:
+      summary: List local LDAP synchronization runs
+      operationId: listLocalLDAPSyncRuns
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      parameters:
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Paginated synchronization run history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncRunList'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync/{connectorId}/runs/{runId}:
+    get:
+      summary: Get a local LDAP synchronization run
+      operationId: getLocalLDAPSyncRun
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      parameters:
+        - in: path
+          name: connectorId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Synchronization run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncRun'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '404': { "$ref": "#/components/responses/not_found" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync/{connectorId}/runs/{runId}/confirm:
+    post:
+      summary: Confirm a high-risk local LDAP synchronization run
+      operationId: confirmLocalLDAPSyncRun
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      parameters:
+        - in: path
+          name: connectorId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalLDAPSyncRunRequest'
+      responses:
+        '200':
+          description: Confirmed synchronization run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncRun'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '404': { "$ref": "#/components/responses/not_found" }
+        '412': { "$ref": "#/components/responses/precondition_failed" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync/{connectorId}/runs/{runId}/cancel:
+    post:
+      summary: Cancel a queued local LDAP synchronization run
+      operationId: cancelLocalLDAPSyncRun
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      parameters:
+        - in: path
+          name: connectorId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Synchronization run cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncRun'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '404': { "$ref": "#/components/responses/not_found" }
+        '412': { "$ref": "#/components/responses/precondition_failed" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync/{connectorId}/pause:
+    post:
+      summary: Pause automatic local LDAP synchronization
+      operationId: pauseLocalLDAPSync
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      parameters:
+        - in: path
+          name: connectorId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paused synchronization configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncConfig'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '404': { "$ref": "#/components/responses/not_found" }
+        '500': { "$ref": "#/components/responses/internal_error" }
+  /api/local/integrations/ldap-sync/{connectorId}/resume:
+    post:
+      summary: Test and resume automatic local LDAP synchronization
+      operationId: resumeLocalLDAPSync
+      tags: [Local LDAP Integrations]
+      security:
+        - BearerAuth: []
+        - TokenAuth: []
+      parameters:
+        - in: path
+          name: connectorId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Resumed synchronization configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalLDAPSyncConfig'
+        '401': { "$ref": "#/components/responses/requires_authentication" }
+        '403': { "$ref": "#/components/responses/forbidden" }
+        '404': { "$ref": "#/components/responses/not_found" }
+        '412': { "$ref": "#/components/responses/precondition_failed" }
+        '500': { "$ref": "#/components/responses/internal_error" }
   /api/integrations/billing/usage:
     get:
       summary: Get current usage
@@ -10469,14 +11275,14 @@ paths:
         - EDR Intune Integrations
       summary: Update EDR Intune Integration
       description: |
-        Updates an existing EDR Intune Integration. The request body structure is `EDRIntuneRequest`.
+        Updates an existing EDR Intune Integration. Omit the secret to preserve its stored value.
       operationId: updateEDRIntegration
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EDRIntuneRequest'
+              $ref: '#/components/schemas/EDRIntuneUpdateRequest'
       responses:
         '200':
           description: Integration updated successfully. Returns the updated integration.
@@ -10631,7 +11437,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EDRSentinelOneRequest'
+              $ref: '#/components/schemas/EDRSentinelOneUpdateRequest'
       responses:
         '200':
           description: Integration updated successfully. Returns the updated integration.
@@ -10786,7 +11592,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EDRFalconRequest'
+              $ref: '#/components/schemas/EDRFalconUpdateRequest'
       responses:
         '200':
           description: Integration updated successfully. Returns the updated integration.
@@ -12093,7 +12899,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EDRHuntressRequest'
+              $ref: '#/components/schemas/EDRHuntressUpdateRequest'
       responses:
         '200':
           description: Integration updated successfully. Returns the updated integration.
@@ -12248,7 +13054,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EDRFleetDMRequest'
+              $ref: '#/components/schemas/EDRFleetDMUpdateRequest'
       responses:
         '200':
           description: Integration updated successfully. Returns the updated integration.

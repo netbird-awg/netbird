@@ -342,6 +342,21 @@ func (mr *MockManagerMockRecorder) DeleteIdentityProvider(ctx, accountID, idpID,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteIdentityProvider", reflect.TypeOf((*MockManager)(nil).DeleteIdentityProvider), ctx, accountID, idpID, userID)
 }
 
+// ListLDAPGroups mocks base method.
+func (m *MockManager) ListLDAPGroups(ctx context.Context, accountID, idpID, userID string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListLDAPGroups", ctx, accountID, idpID, userID)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListLDAPGroups indicates an expected call of ListLDAPGroups.
+func (mr *MockManagerMockRecorder) ListLDAPGroups(ctx, accountID, idpID, userID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLDAPGroups", reflect.TypeOf((*MockManager)(nil).ListLDAPGroups), ctx, accountID, idpID, userID)
+}
+
 // DeleteNameServerGroup mocks base method.
 func (m *MockManager) DeleteNameServerGroup(ctx context.Context, accountID, nsGroupID, userID string) error {
 	m.ctrl.T.Helper()

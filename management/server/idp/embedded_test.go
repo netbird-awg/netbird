@@ -3,6 +3,8 @@ package idp
 import (
 	"context"
 	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +14,32 @@ import (
 
 	"github.com/netbirdio/netbird/idp/dex"
 )
+
+func TestEmbeddedIdPHandlerEndSessionDoesNotOpenRedirect(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	config := &EmbeddedIdPConfig{
+		Enabled: true,
+		Issuer:  "http://localhost:5556/oauth2",
+		Storage: EmbeddedStorageConfig{
+			Type: "sqlite3",
+			Config: EmbeddedStorageTypeConfig{
+				File: filepath.Join(tmpDir, "dex.db"),
+			},
+		},
+	}
+
+	manager, err := NewEmbeddedIdPManager(ctx, config, nil)
+	require.NoError(t, err)
+	defer func() { _ = manager.Stop(ctx) }()
+
+	req := httptest.NewRequest(http.MethodGet, "/oauth2/end-session?post_logout_redirect_uri=https://attacker.example", nil)
+	rec := httptest.NewRecorder()
+	manager.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusSeeOther, rec.Code)
+	require.Equal(t, "/", rec.Header().Get("Location"))
+}
 
 func TestEmbeddedIdPManager_CreateUser_EndToEnd(t *testing.T) {
 	ctx := context.Background()
@@ -362,6 +390,24 @@ func TestEmbeddedIdPConfig_ToYAMLConfig_SessionCookieEncryptionKey(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, yamlConfig.Sessions)
 	assert.Equal(t, rawKey, yamlConfig.Sessions.CookieEncryptionKey)
+}
+
+func TestEmbeddedIdPConfigNativeMFAIncludesLDAP(t *testing.T) {
+	config := &EmbeddedIdPConfig{
+		Enabled: true,
+		Issuer:  "http://localhost:5556/oauth2",
+		Storage: EmbeddedStorageConfig{
+			Type: "sqlite3",
+			Config: EmbeddedStorageTypeConfig{
+				File: filepath.Join(t.TempDir(), "dex.db"),
+			},
+		},
+	}
+
+	yamlConfig, err := config.ToYAMLConfig()
+	require.NoError(t, err)
+	require.Len(t, yamlConfig.MFA.Authenticators, 1)
+	assert.ElementsMatch(t, []string{"local", "ldap"}, yamlConfig.MFA.Authenticators[0].ConnectorTypes)
 }
 
 func TestResolveSessionCookieEncryptionKey(t *testing.T) {

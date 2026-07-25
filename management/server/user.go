@@ -74,6 +74,15 @@ func (am *DefaultAccountManager) CreateUser(ctx context.Context, accountID, user
 	if user.IsServiceUser {
 		return am.createServiceUser(ctx, accountID, userID, types.StrRoleToUserRole(user.Role), user.Name, user.NonDeletable, user.AutoGroups)
 	}
+
+	if user.IdPID != "" && IsEmbeddedIdp(am.idpManager) {
+		result, err := am.createExternalIdpPreRegistration(ctx, accountID, userID, user)
+		if err != nil {
+			return nil, err
+		}
+		return result.UserInfo, nil
+	}
+
 	return am.inviteNewUser(ctx, accountID, userID, user)
 }
 
@@ -234,17 +243,29 @@ func (am *DefaultAccountManager) GetUserFromUserAuth(ctx context.Context, userAu
 		return nil, err
 	}
 
-	// this code should be outside of the am.GetAccountIDFromToken(claims) because this method is called also by the gRPC
-	// server when user authenticates a device. And we need to separate the Dashboard login event from the Device login event.
-	newLogin := user.LastDashboardLoginChanged(userAuth.LastLogin)
-
-	err = am.Store.SaveUserLastLogin(ctx, userAuth.AccountId, userAuth.UserId, userAuth.LastLogin)
-	if err != nil {
-		log.WithContext(ctx).Debugf("failed to update user last login: %v", err)
+	lastLogin := userAuth.LastLogin
+	if lastLogin.IsZero() {
+		// Embedded Dex doesn't emit nb_last_login. The token issue time is
+		// stable for the session and advances when a new login issues a token.
+		lastLogin = userAuth.IssuedAt
+	}
+	if lastLogin.IsZero() || !lastLogin.After(user.GetLastLogin()) {
+		return user, nil
 	}
 
+	// this code should be outside of the am.GetAccountIDFromToken(claims) because this method is called also by the gRPC
+	// server when user authenticates a device. And we need to separate the Dashboard login event from the Device login event.
+	newLogin := user.LastDashboardLoginChanged(lastLogin)
+
+	err = am.Store.SaveUserLastLogin(ctx, userAuth.AccountId, userAuth.UserId, lastLogin)
+	if err != nil {
+		log.WithContext(ctx).Debugf("failed to update user last login: %v", err)
+		return user, nil
+	}
+	user.LastLogin = &lastLogin
+
 	if newLogin {
-		meta := map[string]any{"timestamp": userAuth.LastLogin}
+		meta := map[string]any{"timestamp": lastLogin}
 		am.StoreEvent(ctx, userAuth.UserId, userAuth.UserId, userAuth.AccountId, activity.DashboardLogin, meta)
 	}
 
@@ -259,33 +280,8 @@ func (am *DefaultAccountManager) ListUsers(ctx context.Context, accountID string
 
 // UpdateUserPassword updates the password for a user in the embedded IdP.
 // This is only available when the embedded IdP is enabled.
-// Users can only change their own password.
 func (am *DefaultAccountManager) UpdateUserPassword(ctx context.Context, accountID, currentUserID, targetUserID string, oldPassword, newPassword string) error {
-	if !IsEmbeddedIdp(am.idpManager) {
-		return status.Errorf(status.PreconditionFailed, "password change is only available with embedded identity provider")
-	}
-
-	if oldPassword == "" {
-		return status.Errorf(status.InvalidArgument, "old password is required")
-	}
-
-	if newPassword == "" {
-		return status.Errorf(status.InvalidArgument, "new password is required")
-	}
-
-	embeddedIdp, ok := am.idpManager.(*idp.EmbeddedIdPManager)
-	if !ok {
-		return status.Errorf(status.Internal, "failed to get embedded IdP manager")
-	}
-
-	err := embeddedIdp.UpdateUserPassword(ctx, currentUserID, targetUserID, oldPassword, newPassword)
-	if err != nil {
-		return status.Errorf(status.InvalidArgument, "failed to update password: %v", err)
-	}
-
-	am.StoreEvent(ctx, currentUserID, targetUserID, accountID, activity.UserPasswordChanged, nil)
-
-	return nil
+	return am.updateEmbeddedUserPassword(ctx, accountID, currentUserID, targetUserID, oldPassword, newPassword)
 }
 
 func (am *DefaultAccountManager) deleteServiceUser(ctx context.Context, accountID string, initiatorUserID string, targetUser *types.User) error {
@@ -593,6 +589,7 @@ func (am *DefaultAccountManager) SaveOrAddUsers(ctx context.Context, accountID, 
 	var peersToExpire []*nbpeer.Peer
 	var addUserEvents []func()
 	var usersToSave = make([]*types.User, 0, len(updates))
+	var usersToReauthenticate []string
 
 	groups, err := am.Store.GetAccountGroups(ctx, store.LockingStrengthNone, accountID)
 	if err != nil {
@@ -640,6 +637,9 @@ func (am *DefaultAccountManager) SaveOrAddUsers(ctx context.Context, accountID, 
 			}
 
 			usersToSave = append(usersToSave, updatedUser)
+			if update.MFAPolicy != "" {
+				usersToReauthenticate = append(usersToReauthenticate, updatedUser.Id)
+			}
 			addUserEvents = append(addUserEvents, userEvents...)
 			peersToExpire = append(peersToExpire, userPeersToExpire...)
 
@@ -672,6 +672,13 @@ func (am *DefaultAccountManager) SaveOrAddUsers(ctx context.Context, accountID, 
 
 	for _, addUserEvent := range addUserEvents {
 		addUserEvent()
+	}
+	if embeddedIdp, ok := am.idpManager.(*idp.EmbeddedIdPManager); ok {
+		for _, userID := range usersToReauthenticate {
+			if err := embeddedIdp.RevokeUserSessions(ctx, userID); err != nil {
+				return nil, status.Errorf(status.Internal, "user policy saved but failed to revoke the existing MFA session")
+			}
+		}
 	}
 
 	if len(peersToExpire) > 0 {
@@ -774,7 +781,23 @@ func (am *DefaultAccountManager) processUserUpdate(ctx context.Context, transact
 	updatedUser := oldUser.Copy()
 	updatedUser.Role = update.Role
 	updatedUser.Blocked = update.Blocked
+	if initiatorUserId == activity.SystemInitiator {
+		updatedUser.LDAPSyncBlocked = update.LDAPSyncBlocked
+	} else if oldUser.Blocked != update.Blocked {
+		// A manual state change transfers ownership away from LDAP sync. This
+		// prevents a later directory observation from undoing an administrator's
+		// explicit block or unblock decision.
+		updatedUser.LDAPSyncBlocked = false
+	}
 	updatedUser.AutoGroups = update.AutoGroups
+	if update.MFAPolicy != "" {
+		policy := update.MFAPolicy.Normalized()
+		if policy != oldUser.MFAPolicy.Normalized() {
+			now := time.Now().UTC()
+			updatedUser.MFAPolicyUpdatedAt = &now
+		}
+		updatedUser.MFAPolicy = policy
+	}
 	// these fields can't be set via API, only via direct call to the method
 	updatedUser.Issued = update.Issued
 	updatedUser.IntegrationReference = update.IntegrationReference
@@ -895,6 +918,9 @@ func (am *DefaultAccountManager) getUserInfo(ctx context.Context, user *types.Us
 
 // validateUserUpdate validates the update operation for a user.
 func validateUserUpdate(groupsMap map[string]*types.Group, initiatorUser, oldUser, update *types.User) error {
+	if update.MFAPolicy != "" && !update.MFAPolicy.IsValid() {
+		return status.Errorf(status.InvalidArgument, "invalid MFA policy")
+	}
 	if initiatorUser == nil {
 		return nil
 	}
@@ -940,6 +966,11 @@ func validateUserUpdate(groupsMap map[string]*types.Group, initiatorUser, oldUse
 func (am *DefaultAccountManager) GetOrCreateAccountByUser(ctx context.Context, userAuth auth.UserAuth) (*types.Account, error) {
 	userID := userAuth.UserId
 	domain := userAuth.Domain
+
+	// Check LDAP group restrictions before allowing login
+	if err := am.checkLDAPGroupRestriction(ctx, userAuth.AccountId, userAuth); err != nil {
+		return nil, err
+	}
 
 	start := time.Now()
 	unlock := am.Store.AcquireGlobalLock(ctx)
@@ -1257,7 +1288,12 @@ func (am *DefaultAccountManager) DeleteRegularUsers(ctx context.Context, account
 
 // deleteRegularUser deletes a specified user and their related peers from the account.
 func (am *DefaultAccountManager) deleteRegularUser(ctx context.Context, accountID, initiatorUserID string, targetUserInfo *types.UserInfo) (bool, error) {
-	if !isNil(am.idpManager) {
+	deletedFromLDAP, err := am.deleteLDAPDirectoryUser(ctx, accountID, targetUserInfo)
+	if err != nil {
+		return false, err
+	}
+
+	if !deletedFromLDAP && !isNil(am.idpManager) {
 		// Delete if the user already exists in the IdP. Necessary in cases where a user account
 		// was created where a user account was provisioned but the user did not sign in
 		_, err := am.idpManager.GetUserDataByID(ctx, targetUserInfo.ID, idp.AppMetadata{WTAccountID: accountID})
@@ -1279,7 +1315,6 @@ func (am *DefaultAccountManager) deleteRegularUser(ctx context.Context, accountI
 	var settings *types.Settings
 	var snap *affectedpeers.Snapshot
 	var change affectedpeers.Change
-	var err error
 
 	err = am.Store.ExecuteInTransaction(ctx, func(transaction store.Store) error {
 		targetUser, err = transaction.GetUserByUserID(ctx, store.LockingStrengthUpdate, targetUserInfo.ID)
@@ -1344,6 +1379,10 @@ func (am *DefaultAccountManager) deleteRegularUser(ctx context.Context, accountI
 	}
 
 	meta := map[string]any{"name": targetUserInfo.Name, "email": targetUserInfo.Email, "created_at": targetUser.CreatedAt, "issued": targetUser.Issued}
+	if deletedFromLDAP {
+		meta["ldap_directory_deleted"] = true
+		meta["idp_id"] = targetUserInfo.IdPID
+	}
 	am.StoreEvent(ctx, initiatorUserID, targetUser.Id, accountID, activity.UserDeleted, meta)
 
 	return updateAccountPeers, nil
@@ -1523,6 +1562,10 @@ func (am *DefaultAccountManager) CreateUserInvite(ctx context.Context, accountID
 		return nil, status.Errorf(status.PreconditionFailed, "invite links are only available with embedded identity provider")
 	}
 
+	if invite.IdPID != "" {
+		return am.createExternalIdpPreRegistration(ctx, accountID, initiatorUserID, invite)
+	}
+
 	if IsLocalAuthDisabled(ctx, am.idpManager) {
 		return nil, status.Errorf(status.PreconditionFailed, "local user creation is disabled - use an external identity provider")
 	}
@@ -1671,6 +1714,7 @@ func (am *DefaultAccountManager) ListUserInvites(ctx context.Context, accountID,
 				Name:       record.Name,
 				Role:       record.Role,
 				AutoGroups: record.AutoGroups,
+				IdPID:      record.IdpID,
 			},
 			InviteExpiresAt: record.ExpiresAt,
 			InviteCreatedAt: record.CreatedAt,
@@ -1847,7 +1891,12 @@ func (am *DefaultAccountManager) DeleteUserInvite(ctx context.Context, accountID
 	return nil
 }
 
-const minPasswordLength = 8
+const (
+	minPasswordLength = 8
+	// bcrypt rejects inputs longer than 72 bytes. Enforce the same limit for
+	// local and LDAP users so password behavior is consistent and predictable.
+	maxPasswordBytes = 72
+)
 
 // validatePassword checks password strength requirements.
 func validatePassword(password string) error {
@@ -1862,6 +1911,9 @@ func validatePassword(password string) error {
 func ValidatePassword(password string) error {
 	if len(password) < minPasswordLength {
 		return errors.New("password must be at least 8 characters long")
+	}
+	if len([]byte(password)) > maxPasswordBytes {
+		return errors.New("password must be at most 72 bytes long")
 	}
 
 	var hasDigit, hasUpper, hasSpecial bool

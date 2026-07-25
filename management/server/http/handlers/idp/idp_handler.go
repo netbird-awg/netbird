@@ -1,7 +1,6 @@
 package idp
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -27,6 +26,7 @@ func AddEndpoints(accountManager account.Manager, router *mux.Router) {
 	router.HandleFunc("/identity-providers/{idpId}", h.getIdentityProvider).Methods("GET", "OPTIONS")
 	router.HandleFunc("/identity-providers/{idpId}", h.updateIdentityProvider).Methods("PUT", "OPTIONS")
 	router.HandleFunc("/identity-providers/{idpId}", h.deleteIdentityProvider).Methods("DELETE", "OPTIONS")
+	router.HandleFunc("/identity-providers/{idpId}/ldap-groups", h.getLDAPGroups).Methods("GET", "OPTIONS")
 }
 
 func newHandler(accountManager account.Manager) *handler {
@@ -96,7 +96,7 @@ func (h *handler) createIdentityProvider(w http.ResponseWriter, r *http.Request)
 	accountID, userID := userAuth.AccountId, userAuth.UserId
 
 	var req api.IdentityProviderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSONBody(w, r, &req); err != nil {
 		util.WriteErrorResponse("couldn't parse JSON request", http.StatusBadRequest, w)
 		return
 	}
@@ -130,7 +130,7 @@ func (h *handler) updateIdentityProvider(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req api.IdentityProviderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSONBody(w, r, &req); err != nil {
 		util.WriteErrorResponse("couldn't parse JSON request", http.StatusBadRequest, w)
 		return
 	}
@@ -171,26 +171,55 @@ func (h *handler) deleteIdentityProvider(w http.ResponseWriter, r *http.Request)
 	util.WriteJSONObject(r.Context(), w, util.EmptyObject{})
 }
 
+// getLDAPGroups returns all LDAP groups for a specific LDAP identity provider
+func (h *handler) getLDAPGroups(w http.ResponseWriter, r *http.Request) {
+	userAuth, err := nbcontext.GetUserAuthFromContext(r.Context())
+	if err != nil {
+		util.WriteError(r.Context(), err, w)
+		return
+	}
+
+	accountID, userID := userAuth.AccountId, userAuth.UserId
+
+	vars := mux.Vars(r)
+	idpID := vars["idpId"]
+	if idpID == "" {
+		util.WriteError(r.Context(), status.Errorf(status.InvalidArgument, "identity provider ID is required"), w)
+		return
+	}
+
+	groups, err := h.accountManager.ListLDAPGroups(r.Context(), accountID, idpID, userID)
+	if err != nil {
+		util.WriteError(r.Context(), err, w)
+		return
+	}
+
+	util.WriteJSONObject(r.Context(), w, groups)
+}
+
 func toAPIResponse(idp *types.IdentityProvider) api.IdentityProvider {
 	resp := api.IdentityProvider{
-		Type:     api.IdentityProviderType(idp.Type),
-		Name:     idp.Name,
-		Issuer:   idp.Issuer,
-		ClientId: idp.ClientID,
+		Type:             api.IdentityProviderType(idp.Type),
+		Name:             idp.Name,
+		Issuer:           idp.Issuer,
+		ClientId:         idp.ClientID,
+		SecretConfigured: idp.ClientSecret != "" || idp.LDAPBindPW != "",
 	}
 	if idp.ID != "" {
 		resp.Id = &idp.ID
 	}
-	// Note: ClientSecret is never returned in responses for security
+	applyLDAPAPIResponse(&resp, idp)
 	return resp
 }
 
 func fromAPIRequest(req *api.IdentityProviderRequest) *types.IdentityProvider {
-	return &types.IdentityProvider{
+	idp := &types.IdentityProvider{
 		Type:         types.IdentityProviderType(req.Type),
 		Name:         req.Name,
 		Issuer:       req.Issuer,
 		ClientID:     req.ClientId,
 		ClientSecret: req.ClientSecret,
 	}
+	applyLDAPAPIRequest(idp, req.Ldap)
+	return idp
 }

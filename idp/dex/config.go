@@ -58,6 +58,10 @@ type YAMLConfig struct {
 
 	// MFA holds multi-factor authentication configuration.
 	MFA MFAConfig `yaml:"mfa" json:"mfa"`
+
+	// MFASecretEncryptionKey is injected by the management server at runtime.
+	// It is intentionally excluded from serialized Dex configuration.
+	MFASecretEncryptionKey string `yaml:"-" json:"-"`
 }
 
 type Sessions struct {

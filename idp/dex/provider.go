@@ -52,6 +52,8 @@ type Provider struct {
 	grpcServer   *grpc.Server
 	grpcListener net.Listener
 	storage      storage.Storage
+	mfaStorage   *mfaAwareStorage
+	mfaLimiter   MFAAttemptLimiter
 	logger       *slog.Logger
 	mu           sync.Mutex
 	running      bool
@@ -84,8 +86,14 @@ func NewProvider(ctx context.Context, config *Config) (*Provider, error) {
 		return nil, fmt.Errorf("failed to open storage: %w", err)
 	}
 
+	wrappedStorage, err := newMFAAwareStorage(stor, "")
+	if err != nil {
+		stor.Close()
+		return nil, err
+	}
+
 	// Ensure a local connector exists (for password authentication)
-	if err := ensureLocalConnector(ctx, stor); err != nil {
+	if err := ensureLocalConnector(ctx, wrappedStorage); err != nil {
 		stor.Close()
 		return nil, fmt.Errorf("failed to ensure local connector: %w", err)
 	}
@@ -107,7 +115,7 @@ func NewProvider(ctx context.Context, config *Config) (*Provider, error) {
 		KeysRotationPeriod: "6h",
 	}
 
-	localSigner, err := localSignerConfig.Open(ctx, stor, 24*time.Hour, time.Now, logger)
+	localSigner, err := localSignerConfig.Open(ctx, wrappedStorage, 24*time.Hour, time.Now, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create local signer: %w", err)
 	}
@@ -115,7 +123,7 @@ func NewProvider(ctx context.Context, config *Config) (*Provider, error) {
 	// Build Dex server config - use Dex's types directly
 	dexConfig := server.Config{
 		Issuer:                     issuer,
-		Storage:                    stor,
+		Storage:                    wrappedStorage,
 		SkipApprovalScreen:         true,
 		SupportedResponseTypes:     []string{"code"},
 		ContinueOnConnectorFailure: true,
@@ -136,10 +144,11 @@ func NewProvider(ctx context.Context, config *Config) (*Provider, error) {
 	}
 
 	return &Provider{
-		config:    config,
-		dexServer: dexSrv,
-		storage:   stor,
-		logger:    logger,
+		config:     config,
+		dexServer:  dexSrv,
+		storage:    wrappedStorage,
+		mfaStorage: wrappedStorage,
+		logger:     logger,
 	}, nil
 }
 
@@ -166,19 +175,29 @@ func NewProviderFromYAML(ctx context.Context, yamlConfig *YAMLConfig) (*Provider
 		return nil, fmt.Errorf("failed to open storage: %w", err)
 	}
 
-	if err := initializeStorage(ctx, stor, yamlConfig); err != nil {
+	wrappedStorage, err := newMFAAwareStorage(stor, yamlConfig.MFASecretEncryptionKey)
+	if err != nil {
 		stor.Close()
 		return nil, err
 	}
 
-	dexConfig := buildDexConfig(yamlConfig, stor, logger)
+	if err := initializeStorage(ctx, wrappedStorage, yamlConfig); err != nil {
+		stor.Close()
+		return nil, err
+	}
+	if err := wrappedStorage.encryptConnectorConfigsAtRest(ctx); err != nil {
+		stor.Close()
+		return nil, err
+	}
+
+	dexConfig := buildDexConfig(yamlConfig, wrappedStorage, logger)
 	dexConfig.RefreshTokenPolicy, err = yamlConfig.GetRefreshTokenPolicy(logger)
 	if err != nil {
 		stor.Close()
 		return nil, fmt.Errorf("failed to create refresh token policy: %w", err)
 	}
 
-	localSigner, err := getSigner(ctx, stor, yamlConfig, logger)
+	localSigner, err := getSigner(ctx, wrappedStorage, yamlConfig, logger)
 	if err != nil {
 		stor.Close()
 		return nil, fmt.Errorf("failed to create local signer: %w", err)
@@ -196,7 +215,8 @@ func NewProviderFromYAML(ctx context.Context, yamlConfig *YAMLConfig) (*Provider
 		config:     &Config{Issuer: yamlConfig.Issuer, GRPCAddr: yamlConfig.GRPC.Addr},
 		yamlConfig: yamlConfig,
 		dexServer:  dexSrv,
-		storage:    stor,
+		storage:    wrappedStorage,
+		mfaStorage: wrappedStorage,
 		logger:     logger,
 	}, nil
 }
@@ -243,10 +263,12 @@ func initializeStorage(ctx context.Context, stor storage.Storage, cfg *YAMLConfi
 	return ensureStaticConnectors(ctx, stor, cfg.StaticConnectors)
 }
 
-// ensureStaticPasswords creates or updates static passwords in storage
+// ensureStaticPasswords creates static passwords in storage if they don't already exist.
+// Existing passwords are never overwritten, so that user-initiated password changes
+// (via the API) are preserved across server restarts.
 func ensureStaticPasswords(ctx context.Context, stor storage.Storage, passwords []Password) error {
 	for _, pw := range passwords {
-		existing, err := stor.GetPassword(ctx, pw.Email)
+		_, err := stor.GetPassword(ctx, pw.Email)
 		if errors.Is(err, storage.ErrNotFound) {
 			if err := stor.CreatePassword(ctx, storage.Password(pw)); err != nil {
 				return fmt.Errorf("failed to create password for %s: %w", pw.Email, err)
@@ -255,15 +277,6 @@ func ensureStaticPasswords(ctx context.Context, stor storage.Storage, passwords 
 		}
 		if err != nil {
 			return fmt.Errorf("failed to get password for %s: %w", pw.Email, err)
-		}
-		if string(existing.Hash) != string(pw.Hash) {
-			if err := stor.UpdatePassword(ctx, pw.Email, func(old storage.Password) (storage.Password, error) {
-				old.Hash = pw.Hash
-				old.Username = pw.Username
-				return old, nil
-			}); err != nil {
-				return fmt.Errorf("failed to update password for %s: %w", pw.Email, err)
-			}
 		}
 	}
 	return nil
@@ -345,9 +358,15 @@ func (p *Provider) Start(_ context.Context) error {
 	// Mount Dex at /oauth2/ path for reverse proxy compatibility
 	// Don't strip the prefix - Dex's issuer includes /oauth2 so it expects the full path
 	mux := http.NewServeMux()
-	mux.Handle("/oauth2/", p.dexServer)
+	mux.Handle("/oauth2/", p.Handler())
 
-	p.httpServer = &http.Server{Handler: mux}
+	p.httpServer = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	p.running = true
 
 	go func() {
@@ -562,7 +581,7 @@ func (p *Provider) Handler() http.Handler {
 			return
 		}
 
-		p.dexServer.ServeHTTP(w, r)
+		p.serveDexWithMFAState(w, r)
 	})
 }
 
@@ -709,35 +728,10 @@ func (p *Provider) ListUsers(ctx context.Context) ([]storage.Password, error) {
 
 // UpdateUserPassword updates the password for a user identified by userID.
 // The userID can be either an encoded Dex ID (base64 protobuf) or a raw UUID.
-// It verifies the current password before updating.
+// For local users, it verifies the current password via bcrypt.
+// For LDAP users, it delegates to the LDAP directory.
 func (p *Provider) UpdateUserPassword(ctx context.Context, userID string, oldPassword, newPassword string) error {
-	// Get the user by ID to find their email
-	user, err := p.GetUserByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("failed to get user: %w", err)
-	}
-
-	// Verify old password
-	if err := bcrypt.CompareHashAndPassword(user.Hash, []byte(oldPassword)); err != nil {
-		return fmt.Errorf("current password is incorrect")
-	}
-
-	// Hash the new password
-	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to hash new password: %w", err)
-	}
-
-	// Update the password in storage
-	err = p.storage.UpdatePassword(ctx, user.Email, func(old storage.Password) (storage.Password, error) {
-		old.Hash = newHash
-		return old, nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to update password: %w", err)
-	}
-
-	return nil
+	return p.updateUserPassword(ctx, userID, oldPassword, newPassword)
 }
 
 // GetIssuer returns the OIDC issuer URL.

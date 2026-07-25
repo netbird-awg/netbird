@@ -34,4 +34,8 @@ type UserAuth struct {
 
 	// Indicates whether this user has authenticated with a Personal Access Token
 	IsPAT bool
+
+	// IssuedAt is the time the JWT token was issued (from the `iat` claim).
+	// Used to tie MFA sessions to specific login sessions.
+	IssuedAt time.Time
 }

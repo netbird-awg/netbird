@@ -137,6 +137,10 @@ func (c *ClaimsExtractor) ToUserAuth(token *jwt.Token) (auth.UserAuth, error) {
 		userAuth.PreferredName = preferredName
 	}
 
+	if iat, err := claims.GetIssuedAt(); err == nil && iat != nil {
+		userAuth.IssuedAt = iat.Time
+	}
+
 	return userAuth, nil
 }
 

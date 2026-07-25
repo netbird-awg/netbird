@@ -26,6 +26,7 @@ import (
 	rpservice "github.com/netbirdio/netbird/management/internals/modules/reverseproxy/service"
 	"github.com/netbirdio/netbird/management/internals/modules/zones"
 	"github.com/netbirdio/netbird/management/internals/modules/zones/records"
+	edrmodel "github.com/netbirdio/netbird/management/server/localintegrations/edr/model"
 	resourceTypes "github.com/netbirdio/netbird/management/server/networks/resources/types"
 	routerTypes "github.com/netbirdio/netbird/management/server/networks/routers/types"
 	networkTypes "github.com/netbirdio/netbird/management/server/networks/types"
@@ -950,6 +951,36 @@ func TestPostgresql_DeleteAccount(t *testing.T) {
 	err = store.SaveAccount(context.Background(), account)
 	require.NoError(t, err)
 
+	sqlStore := store.(*SqlStore)
+	require.NoError(t, sqlStore.db.AutoMigrate(
+		&edrmodel.Integration{},
+		&edrmodel.Device{},
+		&edrmodel.Bypass{},
+	))
+	integration := &edrmodel.Integration{
+		AccountID:       account.Id,
+		Provider:        "fleetdm",
+		CreatedBy:       testUserID,
+		Enabled:         true,
+		Groups:          []string{"group-1"},
+		EncryptedConfig: "ciphertext",
+		NextSyncAt:      time.Now().UTC(),
+	}
+	require.NoError(t, sqlStore.db.Create(integration).Error)
+	require.NoError(t, sqlStore.db.Create(&edrmodel.Device{
+		IntegrationID: integration.ID,
+		AccountID:     account.Id,
+		ExternalID:    "device-1",
+		Hostname:      "peer-name",
+		SyncedAt:      time.Now().UTC(),
+	}).Error)
+	require.NoError(t, sqlStore.db.Create(&edrmodel.Bypass{
+		AccountID: account.Id,
+		PeerID:    "testpeer",
+		CreatedBy: testUserID,
+		CreatedAt: time.Now().UTC(),
+	}).Error)
+
 	if len(store.GetAllAccounts(context.Background())) != 1 {
 		t.Errorf("expecting 1 Accounts to be stored after SaveAccount()")
 	}
@@ -975,6 +1006,20 @@ func TestPostgresql_DeleteAccount(t *testing.T) {
 
 	_, err = store.GetAccount(context.Background(), account.Id)
 	require.Error(t, err, "expecting error after removing DeleteAccount when getting account by id")
+
+	var integrations, devices, bypasses int64
+	require.NoError(t, sqlStore.db.Model(&edrmodel.Integration{}).
+		Where("account_id = ?", account.Id).
+		Count(&integrations).Error)
+	require.NoError(t, sqlStore.db.Model(&edrmodel.Device{}).
+		Where("account_id = ?", account.Id).
+		Count(&devices).Error)
+	require.NoError(t, sqlStore.db.Model(&edrmodel.Bypass{}).
+		Where("account_id = ?", account.Id).
+		Count(&bypasses).Error)
+	require.Zero(t, integrations)
+	require.Zero(t, devices)
+	require.Zero(t, bypasses)
 
 	for _, policy := range account.Policies {
 		var rules []*types.PolicyRule

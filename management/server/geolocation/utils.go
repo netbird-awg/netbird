@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"errors"
@@ -12,10 +11,16 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
+	"time"
 )
+
+const maxGeolocationDownloadBytes int64 = 512 << 20
+
+var geolocationHTTPClient = &http.Client{Timeout: 2 * time.Minute}
 
 // decompressTarGzFile decompresses a .tar.gz file.
 func decompressTarGzFile(filepath, destDir string) error {
@@ -151,19 +156,23 @@ func verifyChecksum(filepath, expectedChecksum string) error {
 
 // downloadFile downloads a file from a URL and saves it to a local file path.
 func downloadFile(url, filepath string) error {
-	resp, err := http.Get(url)
+	parsedURL, err := validateGeolocationURL(url)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := geolocationHTTPClient.Do(req) // #nosec G107 -- URL is explicitly validated and is the configured GeoIP source
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected error occurred while downloading the file: %s", string(bodyBytes))
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("unexpected status downloading geolocation file: %s: %s", resp.Status, strings.TrimSpace(string(bodyBytes)))
 	}
 
 	out, err := os.Create(filepath)
@@ -172,24 +181,59 @@ func downloadFile(url, filepath string) error {
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, bytes.NewBuffer(bodyBytes))
-	return err
+	written, err := io.Copy(out, io.LimitReader(resp.Body, maxGeolocationDownloadBytes+1))
+	if err != nil {
+		return err
+	}
+	if written > maxGeolocationDownloadBytes {
+		return fmt.Errorf("geolocation download exceeds %d bytes", maxGeolocationDownloadBytes)
+	}
+	return nil
 }
 
 func getFilenameFromURL(url string) (string, error) {
-	resp, err := http.Head(url)
+	parsedURL, err := validateGeolocationURL(url)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest(http.MethodHead, parsedURL.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := geolocationHTTPClient.Do(req) // #nosec G107 -- URL is explicitly validated and is the configured GeoIP source
 	if err != nil {
 		return "", err
 	}
 
 	defer resp.Body.Close()
-
-	_, params, err := mime.ParseMediaType(resp.Header["Content-Disposition"][0])
-	if err != nil {
-		return "", err
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("unexpected status resolving geolocation filename: %s", resp.Status)
 	}
 
-	filename := params["filename"]
+	if disposition := resp.Header.Get("Content-Disposition"); disposition != "" {
+		_, params, parseErr := mime.ParseMediaType(disposition)
+		if parseErr == nil && path.Base(params["filename"]) != "." {
+			return path.Base(params["filename"]), nil
+		}
+	}
 
+	filename := path.Base(parsedURL.Path)
+	if filename == "." || filename == "/" || filename == "" {
+		return "", errors.New("geolocation URL does not contain a filename")
+	}
 	return filename, nil
+}
+
+func validateGeolocationURL(rawURL string) (*url.URL, error) {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse geolocation URL: %w", err)
+	}
+	if (parsedURL.Scheme != "https" && parsedURL.Scheme != "http") || parsedURL.Host == "" {
+		return nil, errors.New("geolocation URL must be an absolute HTTP or HTTPS URL")
+	}
+	if parsedURL.User != nil {
+		return nil, errors.New("geolocation URL must not contain user information")
+	}
+	return parsedURL, nil
 }

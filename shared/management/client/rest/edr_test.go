@@ -19,6 +19,8 @@ import (
 )
 
 var (
+	testEDRLastSyncedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
 	testIntuneResponse = api.EDRIntuneResponse{
 		AccountId:          "acc-1",
 		ClientId:           "client-1",
@@ -28,7 +30,7 @@ var (
 		Groups:             []api.Group{},
 		LastSyncedInterval: 24,
 		CreatedAt:          time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		LastSyncedAt:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		LastSyncedAt:       &testEDRLastSyncedAt,
 		UpdatedAt:          time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 		CreatedBy:          "user-1",
 	}
@@ -42,7 +44,7 @@ var (
 		LastSyncedInterval: 24,
 		MatchAttributes:    api.SentinelOneMatchAttributes{},
 		CreatedAt:          time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		LastSyncedAt:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		LastSyncedAt:       &testEDRLastSyncedAt,
 		UpdatedAt:          time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 		CreatedBy:          "user-1",
 	}
@@ -55,7 +57,7 @@ var (
 		Groups:            []api.Group{},
 		ZtaScoreThreshold: 50,
 		CreatedAt:         time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		LastSyncedAt:      time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		LastSyncedAt:      &testEDRLastSyncedAt,
 		UpdatedAt:         time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 		CreatedBy:         "user-1",
 	}
@@ -68,7 +70,7 @@ var (
 		LastSyncedInterval: 24,
 		MatchAttributes:    api.HuntressMatchAttributes{},
 		CreatedAt:          time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		LastSyncedAt:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		LastSyncedAt:       &testEDRLastSyncedAt,
 		UpdatedAt:          time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 		CreatedBy:          "user-1",
 	}
@@ -154,13 +156,15 @@ func TestEDR_UpdateIntuneIntegration_200(t *testing.T) {
 	withMockClient(func(c *rest.Client, mux *http.ServeMux) {
 		mux.HandleFunc("/api/integrations/edr/intune", func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "PUT", r.Method)
+			var request map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+			assert.NotContains(t, request, "secret")
 			retBytes, _ := json.Marshal(testIntuneResponse)
 			_, err := w.Write(retBytes)
 			require.NoError(t, err)
 		})
-		ret, err := c.EDR.UpdateIntuneIntegration(context.Background(), api.EDRIntuneRequest{
+		ret, err := c.EDR.UpdateIntuneIntegration(context.Background(), api.EDRIntuneUpdateRequest{
 			ClientId: "client-1",
-			Secret:   "new-secret",
 			TenantId: "tenant-1",
 			Groups:   []string{"group-1"},
 		})

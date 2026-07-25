@@ -11,8 +11,10 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
 
+	"github.com/netbirdio/netbird/idp/dex"
 	"github.com/netbirdio/netbird/management/server/idp"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/util"
@@ -133,21 +135,30 @@ type ManagementConfig struct {
 	ReverseProxy            ReverseProxyConfig `yaml:"reverseProxy"`
 }
 
+// AuthConnectorConfig represents a static connector to be loaded on startup.
+type AuthConnectorConfig struct {
+	Type   string                 `yaml:"type"`
+	Name   string                 `yaml:"name"`
+	ID     string                 `yaml:"id"`
+	Config map[string]interface{} `yaml:"config"`
+}
+
 // AuthConfig contains authentication/identity provider settings
 type AuthConfig struct {
-	Issuer                          string            `yaml:"issuer"`
-	LocalAuthDisabled               bool              `yaml:"localAuthDisabled"`
-	SignKeyRefreshEnabled           bool              `yaml:"signKeyRefreshEnabled"`
-	MfaSessionMaxLifetime           string            `yaml:"mfaSessionMaxLifetime"`
-	MfaSessionIdleTimeout           string            `yaml:"mfaSessionIdleTimeout"`
-	MfaSessionRememberMe            bool              `yaml:"mfaSessionRememberMe"`
-	SessionCookieEncryptionKey      string            `yaml:"sessionCookieEncryptionKey"`
-	Storage                         AuthStorageConfig `yaml:"storage"`
-	DashboardRedirectURIs           []string          `yaml:"dashboardRedirectURIs"`
-	CLIRedirectURIs                 []string          `yaml:"cliRedirectURIs"`
-	Owner                           *AuthOwnerConfig  `yaml:"owner,omitempty"`
-	DashboardPostLogoutRedirectURIs []string          `yaml:"dashboardPostLogoutRedirectURIs"`
-	GrantTypes                      []string          `yaml:"grantTypes"`
+	Issuer                          string                `yaml:"issuer"`
+	LocalAuthDisabled               bool                  `yaml:"localAuthDisabled"`
+	SignKeyRefreshEnabled           bool                  `yaml:"signKeyRefreshEnabled"`
+	MfaSessionMaxLifetime           string                `yaml:"mfaSessionMaxLifetime"`
+	MfaSessionIdleTimeout           string                `yaml:"mfaSessionIdleTimeout"`
+	MfaSessionRememberMe            bool                  `yaml:"mfaSessionRememberMe"`
+	SessionCookieEncryptionKey      string                `yaml:"sessionCookieEncryptionKey"`
+	Storage                         AuthStorageConfig     `yaml:"storage"`
+	DashboardRedirectURIs           []string              `yaml:"dashboardRedirectURIs"`
+	CLIRedirectURIs                 []string              `yaml:"cliRedirectURIs"`
+	Owner                           *AuthOwnerConfig      `yaml:"owner,omitempty"`
+	DashboardPostLogoutRedirectURIs []string              `yaml:"dashboardPostLogoutRedirectURIs"`
+	GrantTypes                      []string              `yaml:"grantTypes"`
+	Connectors                      []AuthConnectorConfig `yaml:"connectors,omitempty"`
 }
 
 // AuthStorageConfig contains auth storage settings
@@ -624,13 +635,43 @@ func (c *CombinedConfig) buildEmbeddedIdPConfig(mgmt ManagementConfig) (*idp.Emb
 	}
 
 	if mgmt.Auth.Owner != nil && mgmt.Auth.Owner.Email != "" {
+		passwordHash, err := ensureBcryptHash(mgmt.Auth.Owner.Password)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process owner password: %w", err)
+		}
 		cfg.Owner = &idp.OwnerConfig{
 			Email: mgmt.Auth.Owner.Email,
-			Hash:  mgmt.Auth.Owner.Password,
+			Hash:  passwordHash,
 		}
 	}
 
+	for _, c := range mgmt.Auth.Connectors {
+		cfg.StaticConnectors = append(cfg.StaticConnectors, dex.Connector{
+			Type:   c.Type,
+			Name:   c.Name,
+			ID:     c.ID,
+			Config: c.Config,
+		})
+	}
+
 	return cfg, nil
+}
+
+// ensureBcryptHash returns the input as-is if it's already a bcrypt hash,
+// otherwise hashes it with bcrypt. This allows config files to use either
+// plaintext passwords or pre-hashed bcrypt values.
+func ensureBcryptHash(password string) (string, error) {
+	if password == "" {
+		return "", fmt.Errorf("password cannot be empty")
+	}
+	if strings.HasPrefix(password, "$2a$") || strings.HasPrefix(password, "$2b$") || strings.HasPrefix(password, "$2y$") {
+		return password, nil
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	return string(hash), nil
 }
 
 // ToManagementConfig converts CombinedConfig to management server config
@@ -768,23 +809,82 @@ func ApplyEmbeddedIdPConfig(ctx context.Context, cfg *nbconfig.Config, mgmtPort 
 	return nil
 }
 
-// EnsureEncryptionKey generates an encryption key if not set.
-// Unlike management server, we don't write back to the config file.
+const datastoreEncryptionKeyFilename = "datastore-encryption.key"
+
+// EnsureEncryptionKey loads or creates a stable datastore encryption key in
+// the combined server data directory when no explicit key is configured.
 func EnsureEncryptionKey(ctx context.Context, cfg *nbconfig.Config) error {
 	if cfg.DataStoreEncryptionKey != "" {
 		return nil
 	}
 
-	log.WithContext(ctx).Infof("DataStoreEncryptionKey is not set, generating a new key")
-	key, err := crypt.GenerateKey()
+	if strings.TrimSpace(cfg.Datadir) == "" {
+		return fmt.Errorf("datastore encryption key requires a data directory")
+	}
+	if err := os.MkdirAll(cfg.Datadir, 0o700); err != nil {
+		return fmt.Errorf("create datastore directory: %w", err)
+	}
+
+	keyPath := filePath.Join(cfg.Datadir, datastoreEncryptionKeyFilename)
+	key, created, err := loadOrCreateEncryptionKey(keyPath)
 	if err != nil {
-		return fmt.Errorf("failed to generate datastore encryption key: %v", err)
+		return err
 	}
 	cfg.DataStoreEncryptionKey = key
-	keyPreview := key[:8] + "..."
-	log.WithContext(ctx).Warnf("DataStoreEncryptionKey generated (%s); add it to your config file under 'server.store.encryptionKey' to persist across restarts", keyPreview)
+	if created {
+		log.WithContext(ctx).Infof("generated datastore encryption key at %s", keyPath)
+	} else {
+		log.WithContext(ctx).Debugf("loaded datastore encryption key from %s", keyPath)
+	}
 
 	return nil
+}
+
+func loadOrCreateEncryptionKey(keyPath string) (string, bool, error) {
+	data, err := os.ReadFile(keyPath)
+	if err == nil {
+		key := strings.TrimSpace(string(data))
+		if _, err := crypt.NewFieldEncrypt(key); err != nil {
+			return "", false, fmt.Errorf("invalid datastore encryption key file %s: %w", keyPath, err)
+		}
+		if err := os.Chmod(keyPath, 0o600); err != nil {
+			return "", false, fmt.Errorf("secure datastore encryption key file %s: %w", keyPath, err)
+		}
+		return key, false, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", false, fmt.Errorf("read datastore encryption key file %s: %w", keyPath, err)
+	}
+
+	key, err := crypt.GenerateKey()
+	if err != nil {
+		return "", false, fmt.Errorf("generate datastore encryption key: %w", err)
+	}
+
+	file, err := os.OpenFile(keyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			return loadOrCreateEncryptionKey(keyPath)
+		}
+		return "", false, fmt.Errorf("create datastore encryption key file %s: %w", keyPath, err)
+	}
+
+	if _, err := file.WriteString(key + "\n"); err != nil {
+		_ = file.Close()
+		_ = os.Remove(keyPath)
+		return "", false, fmt.Errorf("write datastore encryption key file %s: %w", keyPath, err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		_ = os.Remove(keyPath)
+		return "", false, fmt.Errorf("sync datastore encryption key file %s: %w", keyPath, err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(keyPath)
+		return "", false, fmt.Errorf("close datastore encryption key file %s: %w", keyPath, err)
+	}
+
+	return key, true, nil
 }
 
 // LogConfigInfo logs informational messages about the loaded configuration

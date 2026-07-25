@@ -47,7 +47,7 @@ func (a *EDRAPI) CreateIntuneIntegration(ctx context.Context, request api.EDRInt
 
 // UpdateIntuneIntegration updates an existing EDR Intune integration
 // See more: https://docs.netbird.io/api/resources/edr#update-intune-integration
-func (a *EDRAPI) UpdateIntuneIntegration(ctx context.Context, request api.EDRIntuneRequest) (*api.EDRIntuneResponse, error) {
+func (a *EDRAPI) UpdateIntuneIntegration(ctx context.Context, request api.EDRIntuneUpdateRequest) (*api.EDRIntuneResponse, error) {
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (a *EDRAPI) CreateSentinelOneIntegration(ctx context.Context, request api.E
 
 // UpdateSentinelOneIntegration updates an existing EDR SentinelOne integration
 // See more: https://docs.netbird.io/api/resources/edr#update-sentinelone-integration
-func (a *EDRAPI) UpdateSentinelOneIntegration(ctx context.Context, request api.EDRSentinelOneRequest) (*api.EDRSentinelOneResponse, error) {
+func (a *EDRAPI) UpdateSentinelOneIntegration(ctx context.Context, request api.EDRSentinelOneUpdateRequest) (*api.EDRSentinelOneResponse, error) {
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func (a *EDRAPI) CreateFalconIntegration(ctx context.Context, request api.EDRFal
 
 // UpdateFalconIntegration updates an existing EDR Falcon integration
 // See more: https://docs.netbird.io/api/resources/edr#update-falcon-integration
-func (a *EDRAPI) UpdateFalconIntegration(ctx context.Context, request api.EDRFalconRequest) (*api.EDRFalconResponse, error) {
+func (a *EDRAPI) UpdateFalconIntegration(ctx context.Context, request api.EDRFalconUpdateRequest) (*api.EDRFalconResponse, error) {
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -236,7 +236,7 @@ func (a *EDRAPI) CreateHuntressIntegration(ctx context.Context, request api.EDRH
 
 // UpdateHuntressIntegration updates an existing EDR Huntress integration
 // See more: https://docs.netbird.io/api/resources/edr#update-huntress-integration
-func (a *EDRAPI) UpdateHuntressIntegration(ctx context.Context, request api.EDRHuntressRequest) (*api.EDRHuntressResponse, error) {
+func (a *EDRAPI) UpdateHuntressIntegration(ctx context.Context, request api.EDRHuntressUpdateRequest) (*api.EDRHuntressResponse, error) {
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -296,7 +296,7 @@ func (a *EDRAPI) CreateFleetDMIntegration(ctx context.Context, request api.EDRFl
 }
 
 // UpdateFleetDMIntegration updates an existing EDR FleetDM integration.
-func (a *EDRAPI) UpdateFleetDMIntegration(ctx context.Context, request api.EDRFleetDMRequest) (*api.EDRFleetDMResponse, error) {
+func (a *EDRAPI) UpdateFleetDMIntegration(ctx context.Context, request api.EDRFleetDMUpdateRequest) (*api.EDRFleetDMResponse, error) {
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, err

@@ -109,6 +109,10 @@ func (am *DefaultAccountManager) GetValidatedPeers(ctx context.Context, accountI
 		return nil, nil, err
 	}
 
+	if validator, ok := am.integratedPeerValidator.(integrated_validator.PeerValidationResultsProvider); ok {
+		return validator.GetPeerValidationResults(ctx, accountID, groups, peers, settings.Extra)
+	}
+
 	validPeers, err := am.integratedPeerValidator.GetValidatedPeers(ctx, accountID, groups, peers, settings.Extra)
 	if err != nil {
 		return nil, nil, err
@@ -124,7 +128,9 @@ func (am *DefaultAccountManager) GetValidatedPeers(ctx context.Context, accountI
 
 type MockIntegratedValidator struct {
 	integrated_validator.IntegratedValidator
-	ValidatePeerFunc func(_ context.Context, update *nbpeer.Peer, peer *nbpeer.Peer, userID string, accountID string, dnsDomain string, peersGroup []string, extraSettings *types.ExtraSettings) (*nbpeer.Peer, bool, error)
+	ValidatePeerFunc      func(_ context.Context, update *nbpeer.Peer, peer *nbpeer.Peer, userID string, accountID string, dnsDomain string, peersGroup []string, extraSettings *types.ExtraSettings) (*nbpeer.Peer, bool, error)
+	GetValidatedPeersFunc func(_ context.Context, accountID string, groups []*types.Group, peers []*nbpeer.Peer, extraSettings *types.ExtraSettings) (map[string]struct{}, error)
+	GetInvalidPeersFunc   func(_ context.Context, accountID string, extraSettings *types.ExtraSettings) (map[string]string, error)
 }
 
 func (a MockIntegratedValidator) ValidateExtraSettings(_ context.Context, newExtraSettings *types.ExtraSettings, oldExtraSettings *types.ExtraSettings, userID string, accountID string) error {
@@ -139,6 +145,9 @@ func (a MockIntegratedValidator) ValidatePeer(_ context.Context, update *nbpeer.
 }
 
 func (a MockIntegratedValidator) GetValidatedPeers(_ context.Context, accountID string, groups []*types.Group, peers []*nbpeer.Peer, extraSettings *types.ExtraSettings) (map[string]struct{}, error) {
+	if a.GetValidatedPeersFunc != nil {
+		return a.GetValidatedPeersFunc(context.Background(), accountID, groups, peers, extraSettings)
+	}
 	validatedPeers := make(map[string]struct{})
 	for _, peer := range peers {
 		validatedPeers[peer.ID] = struct{}{}
@@ -147,6 +156,9 @@ func (a MockIntegratedValidator) GetValidatedPeers(_ context.Context, accountID 
 }
 
 func (a MockIntegratedValidator) GetInvalidPeers(_ context.Context, accountID string, extraSettings *types.ExtraSettings) (map[string]string, error) {
+	if a.GetInvalidPeersFunc != nil {
+		return a.GetInvalidPeersFunc(context.Background(), accountID, extraSettings)
+	}
 	return make(map[string]string), nil
 }
 

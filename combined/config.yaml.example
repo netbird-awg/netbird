@@ -108,6 +108,31 @@ server:
     #   email: "admin@example.com"
     #   password: "initial-password"
 
+    # Optional static identity provider connectors loaded on startup.
+    # Connectors defined here are automatically created/updated in the embedded IdP.
+    # connectors:
+    #   - type: ldap
+    #     name: "OpenLDAP"
+    #     id: "openldap"
+    #     config:
+    #       host: "ldap.example.com:389"
+    #       insecureNoSSL: true
+    #       insecureSkipVerify: true
+    #       bindDN: "cn=admin,dc=example,dc=org"
+    #       bindPW: "adminpassword"
+    #       userSearch:
+    #         baseDN: "ou=users,dc=example,dc=org"
+    #         username: "mail"
+    #         idAttr: "uid"
+    #         emailAttr: "mail"
+    #         nameAttr: "cn"
+    #       groupSearch:
+    #         baseDN: "ou=groups,dc=example,dc=org"
+    #         nameAttr: "cn"
+    #         userMatchers:
+    #           - userAttr: "DN"
+    #             groupAttr: "member"
+
   # Store configuration
   store:
     engine: "sqlite"  # sqlite, postgres, or mysql
