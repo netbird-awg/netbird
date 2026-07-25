@@ -452,7 +452,11 @@ func (s *SqlStore) DeleteAccount(ctx context.Context, account *types.Account) er
 
 func (s *SqlStore) SaveInstallationID(_ context.Context, ID string) error {
 	installation := installation{InstallationIDValue: ID}
-	installation.ID = uint(s.installationPK)
+	installationID, err := checkedIntToUint("installation primary key", s.installationPK)
+	if err != nil {
+		return err
+	}
+	installation.ID = installationID
 
 	return s.db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&installation).Error
 }
@@ -1732,7 +1736,11 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 		account.Network.Dns = networkDns.String
 	}
 	if networkSerial.Valid {
-		account.Network.Serial = uint64(networkSerial.Int64)
+		serial, err := checkedInt64ToUint64("network serial", networkSerial.Int64)
+		if err != nil {
+			return nil, fmt.Errorf("decode account %s: %w", accountID, err)
+		}
+		account.Network.Serial = serial
 	}
 	if sPeerLoginExpirationEnabled.Valid {
 		account.Settings.PeerLoginExpirationEnabled = sPeerLoginExpirationEnabled.Bool
@@ -2011,7 +2019,11 @@ func (s *SqlStore) getPeers(ctx context.Context, accountID string) ([]nbpeer.Pee
 				p.Location.CityName = locationCityName.String
 			}
 			if locationGeoNameID.Valid {
-				p.Location.GeoNameID = uint(locationGeoNameID.Int64)
+				geoNameID, err := checkedInt64ToUint("peer geoname ID", locationGeoNameID.Int64)
+				if err != nil {
+					return p, err
+				}
+				p.Location.GeoNameID = geoNameID
 			}
 			if proxyEmbedded.Valid {
 				p.ProxyMeta.Embedded = proxyEmbedded.Bool
@@ -2389,7 +2401,11 @@ func (s *SqlStore) getServices(ctx context.Context, accountID string) ([]*rpserv
 			s.PortAutoAssigned = portAutoAssigned.Bool
 		}
 		if listenPort.Valid {
-			s.ListenPort = uint16(listenPort.Int64)
+			port, err := checkedInt64ToUint16("reverse proxy listen port", listenPort.Int64)
+			if err != nil {
+				return nil, err
+			}
+			s.ListenPort = port
 		}
 		s.Targets = []*rpservice.Target{}
 		return &s, nil

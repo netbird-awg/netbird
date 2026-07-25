@@ -18,10 +18,21 @@ const (
 	encryptedConnectorPrefix   = "enc:v1:"
 )
 
-// MFARequirementResolver decides whether a specific user must complete the
-// native Dex MFA chain. The user ID is the raw connector user ID, not the
-// NetBird-encoded subject.
-type MFARequirementResolver func(ctx context.Context, userID, connectorID string) (bool, error)
+// MFARequirement controls how a request changes the persisted Dex client MFA
+// chain. Preserve is used before a NetBird user record exists and for inherited
+// connector policies.
+type MFARequirement uint8
+
+const (
+	MFARequirementPreserve MFARequirement = iota
+	MFARequirementRequire
+	MFARequirementDisable
+)
+
+// MFARequirementResolver decides how a specific user affects the native Dex
+// MFA chain. The user ID is the raw connector user ID, not the NetBird-encoded
+// subject.
+type MFARequirementResolver func(ctx context.Context, userID, connectorID string) (MFARequirement, error)
 
 // MFAAttemptLimiter persists native TOTP failure state outside Dex. Returning a
 // positive retry duration blocks the request with HTTP 429.
@@ -229,18 +240,24 @@ func (s *mfaAwareStorage) GetClient(ctx context.Context, id string) (storage.Cli
 		return client, nil
 	}
 
-	required, err := resolver(ctx, userID, connectorID)
+	requirement, err := resolver(ctx, userID, connectorID)
 	if err != nil {
 		return storage.Client{}, fmt.Errorf("resolve MFA policy for user %s via connector %s: %w", userID, connectorID, err)
 	}
-	if !required {
+	switch requirement {
+	case MFARequirementPreserve:
+		return client, nil
+	case MFARequirementDisable:
 		client.MFAChain = []string{}
 		return client, nil
+	case MFARequirementRequire:
+		if len(client.MFAChain) == 0 {
+			client.MFAChain = []string{defaultTOTPAuthenticatorID}
+		}
+		return client, nil
+	default:
+		return storage.Client{}, fmt.Errorf("unsupported MFA requirement %d", requirement)
 	}
-	if len(client.MFAChain) == 0 {
-		client.MFAChain = []string{defaultTOTPAuthenticatorID}
-	}
-	return client, nil
 }
 
 func (s *mfaAwareStorage) CreateAuthRequest(ctx context.Context, request storage.AuthRequest) error {

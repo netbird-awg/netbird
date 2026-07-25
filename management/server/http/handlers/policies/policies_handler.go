@@ -245,13 +245,15 @@ func (h *handler) savePolicy(w http.ResponseWriter, r *http.Request, accountID s
 
 		if rule.PortRanges != nil && len(*rule.PortRanges) != 0 {
 			for _, portRange := range *rule.PortRanges {
-				if portRange.Start < 1 || portRange.End > 65535 {
+				if portRange.Start < 1 || portRange.Start > 65535 ||
+					portRange.End < 1 || portRange.End > 65535 ||
+					portRange.Start > portRange.End {
 					util.WriteError(r.Context(), status.Errorf(status.InvalidArgument, "valid port value is in 1..65535 range"), w)
 					return
 				}
 				pr.PortRanges = append(pr.PortRanges, types.RulePortRange{
-					Start: uint16(portRange.Start),
-					End:   uint16(portRange.End),
+					Start: uint16(portRange.Start), // #nosec G115 -- validated above
+					End:   uint16(portRange.End),   // #nosec G115 -- validated above
 				})
 			}
 		}

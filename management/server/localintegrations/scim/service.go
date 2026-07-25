@@ -16,6 +16,7 @@ import (
 	"github.com/netbirdio/netbird/management/server/account"
 	"github.com/netbirdio/netbird/management/server/activity"
 	"github.com/netbirdio/netbird/management/server/idp"
+	"github.com/netbirdio/netbird/management/server/localintegrations/idconv"
 	scimmodel "github.com/netbirdio/netbird/management/server/localintegrations/scim/model"
 	"github.com/netbirdio/netbird/management/server/permissions"
 	"github.com/netbirdio/netbird/management/server/permissions/modules"
@@ -153,7 +154,10 @@ func (s *Service) CreateIntegration(
 		"provider": provider,
 		"type":     scimIntegrationLabel,
 	})
-	response := integrationToAPI(integration)
+	response, err := integrationToAPI(integration)
+	if err != nil {
+		return nil, err
+	}
 	response.AuthToken = plainToken
 	return response, nil
 }
@@ -168,7 +172,11 @@ func (s *Service) ListIntegrations(ctx context.Context, accountID, userID string
 	}
 	result := make([]api.ScimIntegration, 0, len(integrations))
 	for _, integration := range integrations {
-		result = append(result, *integrationToAPI(integration))
+		response, err := integrationToAPI(integration)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, *response)
 	}
 	return result, nil
 }
@@ -181,7 +189,7 @@ func (s *Service) GetIntegration(ctx context.Context, accountID, userID string, 
 	if err != nil {
 		return nil, err
 	}
-	return integrationToAPI(integration), nil
+	return integrationToAPI(integration)
 }
 
 type UpdateIntegrationRequest struct {
@@ -249,7 +257,7 @@ func (s *Service) UpdateIntegration(
 		"type":     scimIntegrationLabel,
 		"enabled":  integration.Enabled,
 	})
-	return integrationToAPI(integration), nil
+	return integrationToAPI(integration)
 }
 
 func (s *Service) DeleteIntegration(ctx context.Context, accountID, userID string, integrationID uint64) error {
@@ -300,8 +308,12 @@ func (s *Service) ListLogs(ctx context.Context, accountID, userID string, integr
 	}
 	result := make([]api.IdpIntegrationSyncLog, 0, len(logs))
 	for _, entry := range logs {
+		id, err := idconv.Int64(entry.ID)
+		if err != nil {
+			return nil, status.Errorf(status.Internal, "SCIM log ID is out of range")
+		}
 		result = append(result, api.IdpIntegrationSyncLog{
-			Id:        int64(entry.ID),
+			Id:        id,
 			Level:     entry.Level,
 			Message:   entry.Message,
 			Timestamp: entry.CreatedAt,
@@ -407,7 +419,11 @@ func normalizePrefixes(values []string) ([]string, error) {
 	return result, nil
 }
 
-func integrationToAPI(integration *scimmodel.Integration) *api.ScimIntegration {
+func integrationToAPI(integration *scimmodel.Integration) (*api.ScimIntegration, error) {
+	id, err := idconv.Int64(integration.ID)
+	if err != nil {
+		return nil, status.Errorf(status.Internal, "SCIM integration ID is out of range")
+	}
 	lastSyncedAt := time.Time{}
 	if integration.LastSyncedAt != nil {
 		lastSyncedAt = *integration.LastSyncedAt
@@ -422,12 +438,12 @@ func integrationToAPI(integration *scimmodel.Integration) *api.ScimIntegration {
 		ConnectorId:       connectorID,
 		Enabled:           integration.Enabled,
 		GroupPrefixes:     append([]string(nil), integration.GroupPrefixes...),
-		Id:                int64(integration.ID),
+		Id:                id,
 		LastSyncedAt:      lastSyncedAt,
 		Prefix:            integration.Prefix,
 		Provider:          integration.Provider,
 		UserGroupPrefixes: append([]string(nil), integration.UserGroupPrefixes...),
-	}
+	}, nil
 }
 
 func stringValue(value *string) string {

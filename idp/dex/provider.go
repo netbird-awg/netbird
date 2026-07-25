@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/protowire"
 
 	nbjwt "github.com/netbirdio/netbird/shared/auth/jwt"
 )
@@ -614,19 +615,11 @@ func (p *Provider) CreateUser(ctx context.Context, email, username, password str
 // Dex uses this format for the 'sub' claim in JWT tokens.
 // Format: base64(protobuf message with field 1 = user_id, field 2 = connector_id)
 func EncodeDexUserID(userID, connectorID string) string {
-	// Manually encode protobuf: field 1 (user_id) and field 2 (connector_id)
-	// Wire type 2 (length-delimited) for strings
 	var buf []byte
-
-	// Field 1: user_id (tag = 0x0a = field 1, wire type 2)
-	buf = append(buf, 0x0a)
-	buf = append(buf, byte(len(userID)))
-	buf = append(buf, []byte(userID)...)
-
-	// Field 2: connector_id (tag = 0x12 = field 2, wire type 2)
-	buf = append(buf, 0x12)
-	buf = append(buf, byte(len(connectorID)))
-	buf = append(buf, []byte(connectorID)...)
+	buf = protowire.AppendTag(buf, 1, protowire.BytesType)
+	buf = protowire.AppendString(buf, userID)
+	buf = protowire.AppendTag(buf, 2, protowire.BytesType)
+	buf = protowire.AppendString(buf, connectorID)
 
 	return base64.RawStdEncoding.EncodeToString(buf)
 }
@@ -642,33 +635,20 @@ func DecodeDexUserID(encodedID string) (userID, connectorID string, err error) {
 		}
 	}
 
-	// Parse protobuf manually
-	i := 0
-	for i < len(buf) {
-		if i >= len(buf) {
-			break
+	for len(buf) > 0 {
+		fieldNum, wireType, consumed := protowire.ConsumeTag(buf)
+		if consumed < 0 {
+			return "", "", fmt.Errorf("decode Dex user ID tag: %w", protowire.ParseError(consumed))
 		}
-		tag := buf[i]
-		i++
-
-		fieldNum := tag >> 3
-		wireType := tag & 0x07
-
-		if wireType != 2 { // We only expect length-delimited strings
+		buf = buf[consumed:]
+		if wireType != protowire.BytesType {
 			return "", "", fmt.Errorf("unexpected wire type %d", wireType)
 		}
-
-		if i >= len(buf) {
-			return "", "", fmt.Errorf("truncated message")
+		value, consumed := protowire.ConsumeString(buf)
+		if consumed < 0 {
+			return "", "", fmt.Errorf("decode Dex user ID field %d: %w", fieldNum, protowire.ParseError(consumed))
 		}
-		length := int(buf[i])
-		i++
-
-		if i+length > len(buf) {
-			return "", "", fmt.Errorf("truncated string field")
-		}
-		value := string(buf[i : i+length])
-		i += length
+		buf = buf[consumed:]
 
 		switch fieldNum {
 		case 1:

@@ -664,7 +664,7 @@ func logRelayConfig(cfg *CombinedConfig) {
 	}
 	log.Info("--- Relay ---")
 	log.Infof("  Exposed address: %s", cfg.Relay.ExposedAddress)
-	log.Infof("  Auth secret: %s...", maskSecret(cfg.Relay.AuthSecret))
+	log.Infof("  Auth secret: %s", maskSecret(cfg.Relay.AuthSecret))
 	if cfg.Relay.Stun.Enabled {
 		log.Infof("  STUN ports: %v (log level: %s)", cfg.Relay.Stun.Ports, cfg.Relay.Stun.LogLevel)
 	} else {
@@ -738,21 +738,23 @@ func maskDSNPassword(dsn string) string {
 		return strings.Join(parts, " ")
 	}
 
-	// URI format: "user:password@host..."
-	if atIdx := strings.Index(dsn, "@"); atIdx != -1 {
-		prefix := dsn[:atIdx]
-		if colonIdx := strings.Index(prefix, ":"); colonIdx != -1 {
-			return prefix[:colonIdx+1] + "****" + dsn[atIdx:]
+	// URI format: "scheme://user:password@host..."
+	if schemeIdx := strings.Index(dsn, "://"); schemeIdx != -1 {
+		authorityStart := schemeIdx + len("://")
+		if relativeAt := strings.Index(dsn[authorityStart:], "@"); relativeAt != -1 {
+			atIdx := authorityStart + relativeAt
+			if relativeColon := strings.LastIndex(dsn[authorityStart:atIdx], ":"); relativeColon != -1 {
+				colonIdx := authorityStart + relativeColon
+				return dsn[:colonIdx+1] + "****" + dsn[atIdx:]
+			}
 		}
 	}
 
 	return dsn
 }
 
-// maskSecret returns first 4 chars of secret followed by "..."
-func maskSecret(secret string) string {
-	if len(secret) <= 4 {
-		return "****"
-	}
-	return secret[:4] + "..."
+// maskSecret never exposes a secret prefix. Even a short prefix is useful to an
+// attacker and makes production log exports unnecessarily sensitive.
+func maskSecret(_ string) string {
+	return "****"
 }

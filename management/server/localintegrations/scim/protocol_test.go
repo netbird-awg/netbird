@@ -237,7 +237,9 @@ func TestReconcileUsersSkipsEmailCollisionOnUpdate(t *testing.T) {
 		types.UserIssuedIntegration, "old@example.com", "Managed",
 	)
 	managed.AccountID = integration.AccountID
-	managed.IntegrationReference = integrationReference(integration)
+	reference, err := integrationReference(integration)
+	require.NoError(t, err)
+	managed.IntegrationReference = reference
 	manual := types.NewUser(
 		"manual-user", types.UserRoleUser, false, false, "", nil,
 		types.UserIssuedAPI, "taken@example.com", "Manual",
@@ -281,11 +283,13 @@ func TestReconcileGroupsSkipsRenameCollision(t *testing.T) {
 	accountManager := account.NewMockManager(controller)
 	service := &Service{store: repository, accounts: accountManager}
 
+	reference, err := integrationReference(integration)
+	require.NoError(t, err)
 	managed := &types.Group{
 		ID:                   "managed-group",
 		Name:                 "Old Name",
 		Issued:               types.GroupIssuedIntegration,
-		IntegrationReference: integrationReference(integration),
+		IntegrationReference: reference,
 	}
 	manual := &types.Group{ID: "manual-group", Name: "New Name", Issued: types.GroupIssuedAPI}
 	accountManager.EXPECT().

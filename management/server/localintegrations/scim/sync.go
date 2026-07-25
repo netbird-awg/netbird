@@ -12,6 +12,7 @@ import (
 	"github.com/netbirdio/netbird/idp/dex"
 	"github.com/netbirdio/netbird/management/server/activity"
 	"github.com/netbirdio/netbird/management/server/integration_reference"
+	"github.com/netbirdio/netbird/management/server/localintegrations/idconv"
 	scimmodel "github.com/netbirdio/netbird/management/server/localintegrations/scim/model"
 	"github.com/netbirdio/netbird/management/server/types"
 )
@@ -141,7 +142,10 @@ func (s *Service) reconcileGroups(
 		byName[strings.ToLower(group.Name)] = group
 	}
 
-	reference := integrationReference(integration)
+	reference, err := integrationReference(integration)
+	if err != nil {
+		return nil, 0, err
+	}
 	targets := make(map[string]string)
 	skipped := 0
 	for sourceID, source := range sourceGroups {
@@ -217,7 +221,10 @@ func (s *Service) reconcileUsers(
 		}
 	}
 
-	reference := integrationReference(integration)
+	reference, err := integrationReference(integration)
+	if err != nil {
+		return 0, 0, 0, err
+	}
 	for sourceID, source := range sourceUsers {
 		targetID := source.resource.NetBirdObjectID
 		if targetID == "" {
@@ -312,11 +319,15 @@ func (s *Service) reconcileUsers(
 	return synced, disabled, skipped, nil
 }
 
-func integrationReference(integration *scimmodel.Integration) integration_reference.IntegrationReference {
-	return integration_reference.IntegrationReference{
-		ID:              int(integration.ID),
-		IntegrationType: scimmodel.IntegrationType,
+func integrationReference(integration *scimmodel.Integration) (integration_reference.IntegrationReference, error) {
+	id, err := idconv.Int(integration.ID)
+	if err != nil {
+		return integration_reference.IntegrationReference{}, fmt.Errorf("SCIM integration ID is out of range: %w", err)
 	}
+	return integration_reference.IntegrationReference{
+		ID:              id,
+		IntegrationType: scimmodel.IntegrationType,
+	}, nil
 }
 
 func ownedByIntegration(actual, expected integration_reference.IntegrationReference) bool {

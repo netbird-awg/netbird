@@ -6,8 +6,8 @@
 	dev-conflict-report dev-conflict-report-dashboard dev-verify dev-clean
 GOLANGCI_LINT := $(shell pwd)/bin/golangci-lint
 
-DEV_GO_IMAGE ?= golang:1.25.12
-DEV_NODE_IMAGE ?= node:22-bookworm
+DEV_GO_IMAGE ?= golang:1.25.12@sha256:9006890ecba0a168034d99516084099ae3114d9f2b7d6572c77f2dde57ebc980
+DEV_NODE_IMAGE ?= node:22-bookworm@sha256:5647be709086c696ff32edaaf1c70cd26d1da6ab2b39c32f3c7b4c4a31957e37
 DEV_GO_MOD_VOLUME ?= netbird-dev-go-mod
 DEV_GO_BUILD_VOLUME ?= netbird-dev-go-build
 DEV_DASHBOARD_VOLUME ?= netbird-dev-dashboard-deps
@@ -27,6 +27,9 @@ DEV_FAST_GO_PACKAGES := \
 	./client/internal/auth \
 	./management/server/http \
 	./management/internals/server \
+	./management/server/localintegrations/idconv \
+	./management/server/localintegrations/edr \
+	./management/server/localintegrations/eventstreaming \
 	./management/server/localintegrations/ldapsync \
 	./management/server/localintegrations/scim \
 	./management/server/outbound \
@@ -130,7 +133,10 @@ dev-security: dev-volumes
 		-v $(DEV_GO_MOD_VOLUME):/go/pkg/mod \
 		-v $(DEV_GO_BUILD_VOLUME):/root/.cache/go-build \
 		-w /workspace \
-		$(DEV_GO_IMAGE) bash -c 'go run github.com/securego/gosec/v2/cmd/gosec@v2.28.0 -quiet -exclude=G104,G115,G117,G124,G304,G404,G505 ./management/server/... ./idp/dex/... ./client/internal/auth/...'
+		$(DEV_GO_IMAGE) bash -c 'set -e; \
+			go run github.com/securego/gosec/v2/cmd/gosec@v2.22.10 -quiet -exclude=G104,G117,G124,G304,G404,G505 ./management/server/... ./idp/dex/... ./client/internal/auth/...; \
+			CGO_ENABLED=1 go build -o /tmp/netbird-server ./combined; \
+			go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 -mode=binary /tmp/netbird-server'
 
 dev-dashboard-deps: dev-volumes
 	@docker run --rm \

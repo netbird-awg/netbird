@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -241,6 +242,10 @@ func (a *Auth) getPKCEFlow(client *mgm.GrpcClient) (*PKCEAuthorizationFlow, erro
 	}
 
 	protoConfig := protoFlow.GetProviderConfig()
+	loginFlag, err := loginFlagFromProto(protoConfig.GetLoginFlag())
+	if err != nil {
+		return nil, err
+	}
 	config := &PKCEAuthProviderConfig{
 		Audience:              protoConfig.GetAudience(),
 		ClientID:              protoConfig.GetClientID(),
@@ -252,7 +257,7 @@ func (a *Auth) getPKCEFlow(client *mgm.GrpcClient) (*PKCEAuthorizationFlow, erro
 		UseIDToken:            protoConfig.GetUseIDToken(),
 		ClientCertPair:        a.config.ClientCertKeyPair,
 		DisablePromptLogin:    protoConfig.GetDisablePromptLogin(),
-		LoginFlag:             common.LoginFlag(protoConfig.GetLoginFlag()),
+		LoginFlag:             loginFlag,
 	}
 
 	if err := validatePKCEConfig(config); err != nil {
@@ -265,6 +270,19 @@ func (a *Auth) getPKCEFlow(client *mgm.GrpcClient) (*PKCEAuthorizationFlow, erro
 	}
 
 	return flow, nil
+}
+
+func loginFlagFromProto(value uint32) (common.LoginFlag, error) {
+	switch value {
+	case uint32(common.LoginFlagPromptLogin):
+		return common.LoginFlagPromptLogin, nil
+	case uint32(common.LoginFlagMaxAge0):
+		return common.LoginFlagMaxAge0, nil
+	case uint32(common.LoginFlagNone):
+		return common.LoginFlagNone, nil
+	default:
+		return common.LoginFlagNone, fmt.Errorf("unsupported login flag %d received from management", value)
+	}
 }
 
 // getDeviceFlow retrieves device authorization flow configuration and creates a flow instance

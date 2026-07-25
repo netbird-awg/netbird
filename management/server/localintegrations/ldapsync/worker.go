@@ -216,6 +216,10 @@ func (s *Service) executeRun(ctx context.Context, run *ldapsyncmodel.Run) {
 func (s *Service) applyAction(ctx context.Context, config *ldapsyncmodel.Config, action *planAction) error {
 	now := time.Now().UTC()
 	object := action.object
+	reference, err := integrationReferenceForConfig(config)
+	if err != nil {
+		return err
+	}
 	switch action.kind {
 	case "create":
 		name := strings.TrimSpace(action.source.Name)
@@ -235,7 +239,7 @@ func (s *Service) applyAction(ctx context.Context, config *ldapsyncmodel.Config,
 		)
 		user.AccountID = config.AccountID
 		user.MFAPolicy = types.MFAPolicyInherit
-		user.IntegrationReference = integrationReferenceForConfig(config)
+		user.IntegrationReference = reference
 		if _, err := s.events.SaveOrAddUser(ctx, config.AccountID, activity.SystemInitiator, user, true); err != nil {
 			return err
 		}
@@ -249,7 +253,7 @@ func (s *Service) applyAction(ctx context.Context, config *ldapsyncmodel.Config,
 			user.Blocked = false
 			user.LDAPSyncBlocked = false
 		}
-		user.IntegrationReference = integrationReferenceForConfig(config)
+		user.IntegrationReference = reference
 		if _, err := s.events.SaveUser(ctx, config.AccountID, activity.SystemInitiator, user); err != nil {
 			return err
 		}

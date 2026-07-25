@@ -13,6 +13,7 @@ import (
 	"github.com/netbirdio/netbird/idp/dex"
 	"github.com/netbirdio/netbird/management/server/activity"
 	"github.com/netbirdio/netbird/management/server/integration_reference"
+	"github.com/netbirdio/netbird/management/server/localintegrations/idconv"
 	ldapsyncmodel "github.com/netbirdio/netbird/management/server/localintegrations/ldapsync/model"
 	"github.com/netbirdio/netbird/management/server/permissions/operations"
 	"github.com/netbirdio/netbird/management/server/store"
@@ -446,8 +447,12 @@ func fullHash(value string) string {
 	return fmt.Sprintf("%x", sum[:])
 }
 
-func integrationReferenceForConfig(config *ldapsyncmodel.Config) integration_reference.IntegrationReference {
-	return integration_reference.IntegrationReference{ID: int(config.ID), IntegrationType: "local_ldap_sync"}
+func integrationReferenceForConfig(config *ldapsyncmodel.Config) (integration_reference.IntegrationReference, error) {
+	id, err := idconv.Int(config.ID)
+	if err != nil {
+		return integration_reference.IntegrationReference{}, fmt.Errorf("LDAP sync integration ID is out of range: %w", err)
+	}
+	return integration_reference.IntegrationReference{ID: id, IntegrationType: "local_ldap_sync"}, nil
 }
 
 func nowUTC() time.Time { return time.Now().UTC() }

@@ -22,12 +22,12 @@ func TestMFAPolicyServiceLocalPolicies(t *testing.T) {
 		name           string
 		policy         types.MFAPolicy
 		accountDefault bool
-		expected       bool
+		expected       dex.MFARequirement
 	}{
-		{name: "required overrides disabled account", policy: types.MFAPolicyRequired, expected: true},
-		{name: "disabled overrides enabled account", policy: types.MFAPolicyDisabled, accountDefault: true, expected: false},
-		{name: "inherit enabled account", policy: types.MFAPolicyInherit, accountDefault: true, expected: true},
-		{name: "legacy empty policy inherits", policy: "", accountDefault: false, expected: false},
+		{name: "required overrides disabled account", policy: types.MFAPolicyRequired, expected: dex.MFARequirementRequire},
+		{name: "disabled overrides enabled account", policy: types.MFAPolicyDisabled, accountDefault: true, expected: dex.MFARequirementDisable},
+		{name: "inherit enabled account", policy: types.MFAPolicyInherit, accountDefault: true, expected: dex.MFARequirementRequire},
+		{name: "legacy empty policy inherits", policy: "", accountDefault: false, expected: dex.MFARequirementDisable},
 	}
 
 	for _, test := range tests {
@@ -97,7 +97,7 @@ func TestMFAPolicyServiceLDAPUserOverride(t *testing.T) {
 	service := newMFAPolicyService(dataStore, manager)
 	required, err := service.Requirement(ctx, "ldap-user", "ldap-main")
 	require.NoError(t, err)
-	assert.True(t, required)
+	assert.Equal(t, dex.MFARequirementRequire, required)
 
 	_, err = manager.CreateConnector(ctx, &dex.ConnectorConfig{
 		ID:           "google-main",
@@ -109,10 +109,10 @@ func TestMFAPolicyServiceLDAPUserOverride(t *testing.T) {
 	require.NoError(t, err)
 	required, err = service.Requirement(ctx, "external-user", "google-main")
 	require.NoError(t, err)
-	assert.False(t, required, "external OIDC providers keep their own MFA policy")
+	assert.Equal(t, dex.MFARequirementDisable, required, "external OIDC providers keep their own MFA policy")
 }
 
-func TestMFAPolicyServiceAllowsFirstLoginBeforeUserProvisioning(t *testing.T) {
+func TestMFAPolicyServicePreservesDefaultOnFirstLoginBeforeUserProvisioning(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	dataStore := store.NewMockStore(ctrl)
 	encodedUserID := dex.EncodeDexUserID("new-user", "local")
@@ -122,7 +122,7 @@ func TestMFAPolicyServiceAllowsFirstLoginBeforeUserProvisioning(t *testing.T) {
 	service := newMFAPolicyService(dataStore, nil)
 	required, err := service.Requirement(context.Background(), "new-user", "local")
 	require.NoError(t, err)
-	assert.False(t, required)
+	assert.Equal(t, dex.MFARequirementPreserve, required)
 }
 
 func TestMFAPolicyServicePersistsLockoutWithoutRedis(t *testing.T) {

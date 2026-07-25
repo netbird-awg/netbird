@@ -38,8 +38,11 @@ func TestMFAAwareStorageAppliesPerUserClientChain(t *testing.T) {
 		assert.Equal(t, []string{"persisted-chain"}, client.MFAChain)
 	})
 
-	wrapped.setRequirementResolver(func(_ context.Context, userID, connectorID string) (bool, error) {
-		return userID == "required-user" && connectorID == "ldap-main", nil
+	wrapped.setRequirementResolver(func(_ context.Context, userID, connectorID string) (MFARequirement, error) {
+		if userID == "required-user" && connectorID == "ldap-main" {
+			return MFARequirementRequire, nil
+		}
+		return MFARequirementDisable, nil
 	})
 
 	t.Run("required user gets native TOTP", func(t *testing.T) {
@@ -77,6 +80,17 @@ func TestMFAAwareStorageAppliesPerUserClientChain(t *testing.T) {
 
 	t.Run("pre-authentication client lookup fails closed without returning an error", func(t *testing.T) {
 		client, err := wrapped.GetClient(withMFARequestState(context.Background()), "netbird-dashboard")
+		require.NoError(t, err)
+		assert.Equal(t, []string{defaultTOTPAuthenticatorID}, client.MFAChain)
+	})
+
+	t.Run("unprovisioned user preserves persisted connector default", func(t *testing.T) {
+		wrapped.setRequirementResolver(func(context.Context, string, string) (MFARequirement, error) {
+			return MFARequirementPreserve, nil
+		})
+		ctx := withMFARequestState(context.Background())
+		rememberMFAIdentity(ctx, "first-login-user", "ldap-main")
+		client, err := wrapped.GetClient(ctx, "netbird-dashboard")
 		require.NoError(t, err)
 		assert.Equal(t, []string{defaultTOTPAuthenticatorID}, client.MFAChain)
 	})

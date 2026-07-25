@@ -31,44 +31,47 @@ func newMFAPolicyService(dataStore store.Store, embeddedIDP *idp.EmbeddedIdPMana
 	}
 }
 
-func (s *mfaPolicyService) Requirement(ctx context.Context, rawUserID, connectorID string) (bool, error) {
+func (s *mfaPolicyService) Requirement(ctx context.Context, rawUserID, connectorID string) (dex.MFARequirement, error) {
 	eligible, err := s.isEligibleConnector(ctx, connectorID)
 	if err != nil {
-		return false, err
+		return dex.MFARequirementPreserve, err
 	}
 	if !eligible {
-		return false, nil
+		return dex.MFARequirementDisable, nil
 	}
 
 	user, err := s.getUser(ctx, store.LockingStrengthNone, rawUserID, connectorID)
 	if err != nil {
 		if statusErr, ok := status.FromError(err); ok && statusErr.Type() == status.NotFound {
 			// First-time embedded IdP users are authenticated before NetBird creates
-			// their management user record. They have no per-user override yet, so
-			// use the connector default and let account provisioning complete.
-			return false, nil
+			// their management user record. Preserve the persisted Dex client chain
+			// so the account/connector default remains effective during provisioning.
+			return dex.MFARequirementPreserve, nil
 		}
-		return false, err
+		return dex.MFARequirementPreserve, err
 	}
 	switch user.MFAPolicy.Normalized() {
 	case types.MFAPolicyRequired:
-		return true, nil
+		return dex.MFARequirementRequire, nil
 	case types.MFAPolicyDisabled:
-		return false, nil
+		return dex.MFARequirementDisable, nil
 	case types.MFAPolicyInherit:
 		if connectorID != "local" {
-			return false, nil
+			return dex.MFARequirementPreserve, nil
 		}
 		settings, err := s.store.GetAccountSettings(ctx, store.LockingStrengthNone, user.AccountID)
 		if err != nil {
-			return false, fmt.Errorf("get account MFA settings: %w", err)
+			return dex.MFARequirementPreserve, fmt.Errorf("get account MFA settings: %w", err)
 		}
 		if settings == nil {
-			return false, fmt.Errorf("account MFA settings are unavailable")
+			return dex.MFARequirementPreserve, fmt.Errorf("account MFA settings are unavailable")
 		}
-		return settings.LocalMfaEnabled, nil
+		if settings.LocalMfaEnabled {
+			return dex.MFARequirementRequire, nil
+		}
+		return dex.MFARequirementDisable, nil
 	default:
-		return false, fmt.Errorf("unsupported MFA policy %q", user.MFAPolicy)
+		return dex.MFARequirementPreserve, fmt.Errorf("unsupported MFA policy %q", user.MFAPolicy)
 	}
 }
 

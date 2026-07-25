@@ -8,13 +8,17 @@ PROJECT="netbird-local-integrations-test-$$"
 NETWORK="${PROJECT}-network"
 POSTGRES_CONTAINER="${PROJECT}-postgres"
 LDAP_CONTAINER="${PROJECT}-openldap"
-GO_IMAGE="${DEV_GO_IMAGE:-golang:1.25.12}"
+LDAP_IMAGE="${PROJECT}-openldap:local"
+LDAP_TLS_VOLUME="${PROJECT}-ldap-tls"
+GO_IMAGE="${DEV_GO_IMAGE:-golang:1.25.12@sha256:9006890ecba0a168034d99516084099ae3114d9f2b7d6572c77f2dde57ebc980}"
 GO_MOD_VOLUME="${DEV_GO_MOD_VOLUME:-netbird-dev-go-mod}"
 GO_BUILD_VOLUME="${DEV_GO_BUILD_VOLUME:-netbird-dev-go-build}"
 
 cleanup() {
   docker rm -f "$POSTGRES_CONTAINER" "$LDAP_CONTAINER" >/dev/null 2>&1 || true
   docker network rm "$NETWORK" >/dev/null 2>&1 || true
+  docker volume rm "$LDAP_TLS_VOLUME" >/dev/null 2>&1 || true
+  docker image rm "$LDAP_IMAGE" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
@@ -43,7 +47,35 @@ wait_healthy() {
 
 docker volume create "$GO_MOD_VOLUME" >/dev/null
 docker volume create "$GO_BUILD_VOLUME" >/dev/null
+docker volume create "$LDAP_TLS_VOLUME" >/dev/null
 docker network create "$NETWORK" >/dev/null
+
+docker build \
+  -t "$LDAP_IMAGE" \
+  -f "${REPO_ROOT}/deploy/openldap/Dockerfile" \
+  "${REPO_ROOT}/deploy/openldap" >/dev/null
+
+docker run --rm \
+  --entrypoint sh \
+  -v "${LDAP_TLS_VOLUME}:/tls" \
+  alpine/openssl:3.5.4@sha256:42c7389ef077aed0eb4e96d0abbd094083d701bbaff1313073b061c0c9cd8278 -ec '
+    openssl req -x509 -newkey rsa:2048 -nodes \
+      -keyout /tls/ca.key -out /tls/ca.crt -days 1 -sha256 \
+      -subj "/CN=NetBird Test LDAP CA" >/dev/null 2>&1
+    openssl req -newkey rsa:2048 -nodes \
+      -keyout /tls/ldap.key -out /tmp/ldap.csr \
+      -subj "/CN=openldap" >/dev/null 2>&1
+    printf "%s\n" \
+      "subjectAltName=DNS:openldap" \
+      "basicConstraints=critical,CA:FALSE" \
+      "keyUsage=critical,digitalSignature,keyEncipherment" \
+      "extendedKeyUsage=serverAuth" >/tmp/ldap-ext.cnf
+    openssl x509 -req -in /tmp/ldap.csr \
+      -CA /tls/ca.crt -CAkey /tls/ca.key -CAcreateserial \
+      -out /tls/ldap.crt -days 1 -sha256 -extfile /tmp/ldap-ext.cnf >/dev/null 2>&1
+    chmod 600 /tls/ca.key /tls/ldap.key
+    chmod 644 /tls/ca.crt /tls/ldap.crt
+  '
 
 docker run -d \
   --name "$POSTGRES_CONTAINER" \
@@ -58,29 +90,45 @@ docker run -d \
   --health-interval 2s \
   --health-timeout 3s \
   --health-retries 30 \
-  postgres:17-alpine >/dev/null
+  postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 >/dev/null
 
 docker run -d \
   --name "$LDAP_CONTAINER" \
   --network "$NETWORK" \
   --network-alias openldap \
   --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  --cap-add CHOWN \
+  --cap-add DAC_OVERRIDE \
+  --cap-add FOWNER \
+  --cap-add SETGID \
+  --cap-add SETUID \
+  --read-only \
   --tmpfs /var/lib/ldap \
-  --tmpfs /etc/ldap/slapd.d \
-  -e LDAP_ORGANISATION='NetBird Test' \
-  -e LDAP_DOMAIN=example.org \
+  --tmpfs /run:rw,noexec,nosuid,size=16m \
+  --tmpfs /tmp:rw,noexec,nosuid,size=16m \
   -e LDAP_BASE_DN=dc=example,dc=org \
   -e LDAP_ADMIN_PASSWORD=netbird_test_password \
-  -e LDAP_TLS=false \
-  -v "${REPO_ROOT}/deploy/ldap-init.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/50-init.ldif:ro" \
+  -e LDAP_LISTEN_URIS='ldap:/// ldapi:///' \
+  -e LDAP_TLS_CERT_FILE=/cert-seed/ldap.crt \
+  -e LDAP_TLS_KEY_FILE=/cert-seed/ldap.key \
+  -e LDAP_TLS_CA_FILE=/cert-seed/ca.crt \
+  -v "${REPO_ROOT}/deploy/ldap-init.ldif:/bootstrap/custom.ldif:ro" \
+  -v "${LDAP_TLS_VOLUME}:/cert-seed:ro" \
   --health-cmd 'ldapsearch -x -H ldap://127.0.0.1 -b dc=example,dc=org -D cn=admin,dc=example,dc=org -w netbird_test_password >/dev/null' \
   --health-interval 2s \
   --health-timeout 5s \
   --health-retries 30 \
-  osixia/openldap:1.5.0 --copy-service >/dev/null
+  "$LDAP_IMAGE" >/dev/null
 
 wait_healthy "$POSTGRES_CONTAINER"
 wait_healthy "$LDAP_CONTAINER"
+docker exec "$LDAP_CONTAINER" sh -ec '
+  slapd_pid=$(pidof slapd)
+  test -n "$slapd_pid"
+  test "$(stat -c %u "/proc/$slapd_pid")" = "$(id -u openldap)"
+  grep -q "^CapEff:[[:space:]]*0000000000000000$" "/proc/$slapd_pid/status"
+'
 
 docker run --rm \
   --network "$NETWORK" \

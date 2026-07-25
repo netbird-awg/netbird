@@ -461,10 +461,41 @@ func LoadConfig(configPath string) (*CombinedConfig, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	applyEnvironmentOverrides(cfg)
+
 	// Populate internal configs from server settings
 	cfg.ApplySimplifiedDefaults()
 
 	return cfg, nil
+}
+
+func applyEnvironmentOverrides(cfg *CombinedConfig) {
+	overrideString(&cfg.Server.AuthSecret, "NB_SERVER_AUTH_SECRET")
+	overrideString(&cfg.Server.Store.DSN, "NB_STORE_POSTGRES_DSN")
+	overrideString(&cfg.Server.Store.EncryptionKey, "NB_DATASTORE_ENCRYPTION_KEY")
+	overrideString(&cfg.Server.ActivityStore.DSN, "NB_STORE_POSTGRES_DSN")
+	overrideString(&cfg.Server.AuthStore.DSN, "NB_STORE_POSTGRES_DSN")
+
+	if cfg.Server.Auth.Owner != nil {
+		overrideString(&cfg.Server.Auth.Owner.Password, "NB_AUTH_OWNER_PASSWORD")
+	}
+	if ldapBindPassword, ok := os.LookupEnv("NB_AUTH_LDAP_BIND_PASSWORD"); ok {
+		for i := range cfg.Server.Auth.Connectors {
+			connector := &cfg.Server.Auth.Connectors[i]
+			if connector.Type == "ldap" {
+				if connector.Config == nil {
+					connector.Config = make(map[string]interface{})
+				}
+				connector.Config["bindPW"] = ldapBindPassword
+			}
+		}
+	}
+}
+
+func overrideString(target *string, environmentVariable string) {
+	if value, ok := os.LookupEnv(environmentVariable); ok {
+		*target = value
+	}
 }
 
 // Validate validates the configuration

@@ -1683,7 +1683,7 @@ local_acquire_deployment_lock() {
 }
 
 local_build_images() {
-	local -a build_command=(docker build)
+	local -a build_command=(docker build --provenance=mode=max --sbom=true)
   if [[ "${NETBIRD_BUILD_PULL:-false}" == "true" ]]; then
 	  build_command+=(--pull)
   fi
@@ -1691,25 +1691,47 @@ local_build_images() {
 	  build_command+=(--no-cache)
   fi
 
-  echo "Building local NetBird server ${LOCAL_IMAGE_VERSION}..."
+	  echo "Building local NetBird server ${LOCAL_IMAGE_VERSION}..."
 	"${build_command[@]}" \
-    --build-arg "NETBIRD_VERSION=${LOCAL_IMAGE_VERSION}" \
+	    --build-arg "NETBIRD_VERSION=${LOCAL_IMAGE_VERSION}" \
+	    --build-arg "NETBIRD_COMMIT=${LOCAL_SOURCE_COMMIT_ID}" \
+	    --build-arg "SOURCE_DATE_EPOCH=${LOCAL_SOURCE_DATE_EPOCH}" \
+	    --build-arg "GOPROXY=${NETBIRD_GO_PROXY:-https://proxy.golang.org,direct}" \
     --label "org.opencontainers.image.revision=${LOCAL_SOURCE_COMMIT_ID}" \
+    --label "org.opencontainers.image.version=${LOCAL_IMAGE_VERSION}" \
     --label "netbird.local.main-commit=${LOCAL_MAIN_COMMIT_ID}" \
+    --label "netbird.local.source-commit=${LOCAL_SOURCE_COMMIT_ID}" \
     --label "netbird.local.source-dirty=${LOCAL_SOURCE_DIRTY}" \
+    --label "netbird.local.image-version=${LOCAL_IMAGE_VERSION}" \
     -f "${LOCAL_REPO_ROOT}/combined/Dockerfile.multistage" \
     -t "${LOCAL_IMAGE_PREFIX}/netbird-server:${LOCAL_IMAGE_VERSION}" \
     "$LOCAL_REPO_ROOT"
 
-  echo "Building local dashboard ${LOCAL_DASHBOARD_IMAGE_VERSION}..."
+	  echo "Building local dashboard ${LOCAL_DASHBOARD_IMAGE_VERSION}..."
 	"${build_command[@]}" \
     --build-arg "NEXT_PUBLIC_DASHBOARD_VERSION=${LOCAL_DASHBOARD_IMAGE_VERSION}" \
+    --build-arg "ALPINE_MIRROR=${NETBIRD_ALPINE_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}" \
     --label "org.opencontainers.image.revision=${LOCAL_DASHBOARD_SOURCE_COMMIT_ID}" \
+    --label "org.opencontainers.image.version=${LOCAL_DASHBOARD_IMAGE_VERSION}" \
     --label "netbird.local.main-commit=${LOCAL_DASHBOARD_MAIN_COMMIT_ID}" \
+    --label "netbird.local.source-commit=${LOCAL_DASHBOARD_SOURCE_COMMIT_ID}" \
     --label "netbird.local.source-dirty=${LOCAL_DASHBOARD_SOURCE_DIRTY}" \
+    --label "netbird.local.image-version=${LOCAL_DASHBOARD_IMAGE_VERSION}" \
     -f "${LOCAL_DASHBOARD_ROOT}/Dockerfile.multistage" \
-    -t "${LOCAL_IMAGE_PREFIX}/dashboard:${LOCAL_DASHBOARD_IMAGE_VERSION}" \
-    "$LOCAL_DASHBOARD_ROOT"
+	    -t "${LOCAL_IMAGE_PREFIX}/dashboard:${LOCAL_DASHBOARD_IMAGE_VERSION}" \
+	    "$LOCAL_DASHBOARD_ROOT"
+
+  echo "Building maintained local OpenLDAP ${LOCAL_IMAGE_VERSION}..."
+	"${build_command[@]}" \
+    --label "org.opencontainers.image.revision=${LOCAL_SOURCE_COMMIT_ID}" \
+    --label "org.opencontainers.image.version=${LOCAL_IMAGE_VERSION}" \
+    --label "netbird.local.main-commit=${LOCAL_MAIN_COMMIT_ID}" \
+    --label "netbird.local.source-commit=${LOCAL_SOURCE_COMMIT_ID}" \
+    --label "netbird.local.source-dirty=${LOCAL_SOURCE_DIRTY}" \
+    --label "netbird.local.image-version=${LOCAL_IMAGE_VERSION}" \
+    -f "${LOCAL_REPO_ROOT}/deploy/openldap/Dockerfile" \
+    -t "${LOCAL_IMAGE_PREFIX}/openldap:${LOCAL_IMAGE_VERSION}" \
+    "${LOCAL_REPO_ROOT}/deploy/openldap"
 }
 
 local_resolve_main_commit() {
@@ -1722,9 +1744,10 @@ local_resolve_main_commit() {
   fi
 
   LOCAL_SOURCE_COMMIT_ID=$(git -C "$LOCAL_REPO_ROOT" rev-parse --verify HEAD)
+  LOCAL_SOURCE_DATE_EPOCH=$(git -C "$LOCAL_REPO_ROOT" show -s --format=%ct "$LOCAL_SOURCE_COMMIT_ID")
 	LOCAL_SOURCE_DIRTY=false
   if [[ "$LOCAL_SOURCE_COMMIT_ID" != "$LOCAL_MAIN_COMMIT_ID" ]]; then
-    echo "WARNING: HEAD is not ${main_ref}; the requested image version remains the main commit ID." > /dev/stderr
+    echo "HEAD contains local commits on top of ${main_ref}; the image version will identify both revisions." > /dev/stderr
     echo "  HEAD: ${LOCAL_SOURCE_COMMIT_ID}" > /dev/stderr
     echo "  main: ${LOCAL_MAIN_COMMIT_ID}" > /dev/stderr
   fi
@@ -1746,7 +1769,7 @@ local_resolve_main_commit() {
   LOCAL_DASHBOARD_SOURCE_COMMIT_ID=$(git -C "$LOCAL_DASHBOARD_ROOT" rev-parse --verify HEAD)
 	LOCAL_DASHBOARD_SOURCE_DIRTY=false
   if [[ "$LOCAL_DASHBOARD_SOURCE_COMMIT_ID" != "$LOCAL_DASHBOARD_MAIN_COMMIT_ID" ]]; then
-    echo "WARNING: dashboard HEAD is not ${dashboard_main_ref}; the dashboard image version remains the dashboard main commit ID." > /dev/stderr
+    echo "Dashboard HEAD contains local commits on top of ${dashboard_main_ref}; the image version will identify both revisions." > /dev/stderr
     echo "  dashboard HEAD: ${LOCAL_DASHBOARD_SOURCE_COMMIT_ID}" > /dev/stderr
     echo "  dashboard main: ${LOCAL_DASHBOARD_MAIN_COMMIT_ID}" > /dev/stderr
   fi
@@ -1767,7 +1790,12 @@ local_resolve_main_commit() {
     echo "Unable to derive an image branch name from '$main_ref'." > /dev/stderr
     exit 1
   fi
-  LOCAL_IMAGE_VERSION="${LOCAL_MAIN_BRANCH}-${LOCAL_MAIN_COMMIT_SHORT}"
+  LOCAL_SOURCE_COMMIT_SHORT="${LOCAL_SOURCE_COMMIT_ID:0:8}"
+  if [[ "$LOCAL_SOURCE_COMMIT_ID" == "$LOCAL_MAIN_COMMIT_ID" ]]; then
+    LOCAL_IMAGE_VERSION="${LOCAL_MAIN_BRANCH}-${LOCAL_MAIN_COMMIT_SHORT}"
+  else
+    LOCAL_IMAGE_VERSION="${LOCAL_MAIN_BRANCH}-${LOCAL_MAIN_COMMIT_SHORT}-local-${LOCAL_SOURCE_COMMIT_SHORT}"
+  fi
 
   LOCAL_DASHBOARD_MAIN_BRANCH="${NETBIRD_DASHBOARD_IMAGE_BRANCH:-${dashboard_main_ref#*/}}"
   LOCAL_DASHBOARD_MAIN_BRANCH=$(printf '%s' "$LOCAL_DASHBOARD_MAIN_BRANCH" | sed 's/[^A-Za-z0-9_.-]/-/g')
@@ -1776,7 +1804,12 @@ local_resolve_main_commit() {
     echo "Unable to derive a dashboard image branch name from '$dashboard_main_ref'." > /dev/stderr
     exit 1
   fi
-  LOCAL_DASHBOARD_IMAGE_VERSION="${LOCAL_DASHBOARD_MAIN_BRANCH}-${LOCAL_DASHBOARD_MAIN_COMMIT_SHORT}"
+  LOCAL_DASHBOARD_SOURCE_COMMIT_SHORT="${LOCAL_DASHBOARD_SOURCE_COMMIT_ID:0:8}"
+  if [[ "$LOCAL_DASHBOARD_SOURCE_COMMIT_ID" == "$LOCAL_DASHBOARD_MAIN_COMMIT_ID" ]]; then
+    LOCAL_DASHBOARD_IMAGE_VERSION="${LOCAL_DASHBOARD_MAIN_BRANCH}-${LOCAL_DASHBOARD_MAIN_COMMIT_SHORT}"
+  else
+    LOCAL_DASHBOARD_IMAGE_VERSION="${LOCAL_DASHBOARD_MAIN_BRANCH}-${LOCAL_DASHBOARD_MAIN_COMMIT_SHORT}-local-${LOCAL_DASHBOARD_SOURCE_COMMIT_SHORT}"
+  fi
 }
 
 local_quick_tunnel_url_from_logs() {
@@ -1872,6 +1905,66 @@ local_stop_deployment() {
   echo "Compose, generated configuration, TLS material, secrets, and persistent data volumes were kept."
 }
 
+local_backup_deployment() {
+  local backup_root backup_dir checksum_tmp timestamp
+
+  if [[ ! -f "$LOCAL_COMPOSE_FILE" || ! -f "$LOCAL_SECRETS_FILE" ]]; then
+    echo "A rendered deployment and secrets file are required before backup." > /dev/stderr
+    exit 1
+  fi
+  backup_root="${NETBIRD_BACKUP_DIR:-${LOCAL_OUTPUT_DIR}/backups}"
+  timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+  backup_dir="${backup_root}/netbird-${timestamp}"
+  checksum_tmp="${backup_dir}.SHA256SUMS.tmp"
+  if [[ -e "$backup_dir" || -L "$backup_root" ]]; then
+    echo "Refusing unsafe backup path: ${backup_dir}" > /dev/stderr
+    exit 1
+  fi
+  umask 077
+  mkdir -p "$backup_dir/config"
+
+  LOCAL_COMPOSE=("${LOCAL_COMPOSE_BIN[@]}" --project-name "$LOCAL_PROJECT_NAME" --env-file "$LOCAL_SECRETS_FILE" -f "$LOCAL_COMPOSE_FILE")
+  # shellcheck disable=SC2016 # Expand database variables inside the container.
+  "${LOCAL_COMPOSE[@]}" exec -T postgres sh -ec \
+    'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+    > "${backup_dir}/postgres.dump"
+  "${LOCAL_COMPOSE[@]}" exec -T openldap \
+    slapcat -f /run/slapd/slapd.conf > "${backup_dir}/openldap.ldif"
+
+  cp -p "$LOCAL_SECRETS_FILE" "${backup_dir}/config/secrets.env"
+  cp -p "$LOCAL_CONFIG_FILE" "${backup_dir}/config/config.local.yaml"
+  cp -p "$LOCAL_COMPOSE_FILE" "${backup_dir}/config/docker-compose.yml"
+  cp -p "$LOCAL_DASHBOARD_ENV_FILE" "${backup_dir}/config/dashboard.local.env"
+  cp -p "$LOCAL_TRAEFIK_FILE" "${backup_dir}/config/traefik.local.yaml"
+  cp -p "$LOCAL_LDAP_BOOTSTRAP_FILE" "${backup_dir}/config/ldap-bootstrap.local.ldif"
+  cp -R "$LOCAL_TLS_DIR" "${backup_dir}/config/tls"
+  cp -R "$LOCAL_LDAP_TLS_DIR" "${backup_dir}/config/ldap-tls"
+  chmod -R go-rwx "$backup_dir"
+
+  (
+    cd "$backup_dir"
+    trap 'rm -f -- "$checksum_tmp"' EXIT
+    if command -v sha256sum >/dev/null 2>&1; then
+      find . -type f ! -name SHA256SUMS |
+        LC_ALL=C sort |
+        xargs sha256sum > "$checksum_tmp"
+    elif command -v shasum >/dev/null 2>&1; then
+      find . -type f ! -name SHA256SUMS |
+        LC_ALL=C sort |
+        xargs shasum -a 256 > "$checksum_tmp"
+    else
+      echo "sha256sum or shasum is required to finalize the backup." > /dev/stderr
+      exit 1
+    fi
+    mv "$checksum_tmp" SHA256SUMS
+    trap - EXIT
+    chmod 0600 SHA256SUMS
+  )
+
+  echo "Restricted-permission backup created: ${backup_dir}"
+  echo "Copy this directory to encrypted off-host storage and perform a restore drill."
+}
+
 local_env_value() {
   local key="$1"
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$LOCAL_SECRETS_FILE"
@@ -1894,7 +1987,7 @@ local_prepare_secrets() {
     -e HOST_UID="$(id -u)" \
     -e HOST_GID="$(id -g)" \
     -v "$LOCAL_RUNTIME_DIR:/runtime" \
-    osixia/openldap:1.5.0 -ec '
+    alpine/openssl:3.5.4@sha256:42c7389ef077aed0eb4e96d0abbd094083d701bbaff1313073b061c0c9cd8278 -ec '
       secrets_file=/runtime/secrets.env
       umask 077
       if [ ! -f "$secrets_file" ]; then
@@ -1930,6 +2023,7 @@ local_prepare_secrets() {
   NETBIRD_ADMIN_PASSWORD=$(local_env_value NETBIRD_ADMIN_PASSWORD)
   NETBIRD_RELAY_AUTH_SECRET=$(local_env_value NETBIRD_RELAY_AUTH_SECRET)
   DATASTORE_ENCRYPTION_KEY=$(local_env_value NETBIRD_DATASTORE_ENCRYPTION_KEY)
+  : "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" "$NETBIRD_ADMIN_PASSWORD"
 
   local required_value
   for required_value in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB LDAP_ADMIN_PASSWORD \
@@ -2407,7 +2501,6 @@ local_prepare_ldap_tls_certificate() {
 }
 
 local_render_server_config() {
-  local postgres_dsn="host=postgres port=5432 user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} sslmode=disable TimeZone=UTC"
   local ldap_root_ca
   local previous_umask
 
@@ -2435,7 +2528,7 @@ server:
   logLevel: "info"
   logFile: "console"
 
-  authSecret: "${NETBIRD_RELAY_AUTH_SECRET}"
+  authSecret: ""
   dataDir: "/var/lib/netbird"
   disableGeoliteUpdate: true
 
@@ -2449,7 +2542,7 @@ server:
       - "http://localhost:53000/"
     owner:
       email: "admin@${LOCAL_DOMAIN}"
-      password: "${NETBIRD_ADMIN_PASSWORD}"
+      password: ""
     connectors:
       - type: ldap
         name: "OpenLDAP"
@@ -2461,7 +2554,7 @@ server:
           rootCA: |
 ${ldap_root_ca}
           bindDN: "cn=admin,dc=example,dc=org"
-          bindPW: "${LDAP_ADMIN_PASSWORD}"
+          bindPW: ""
           userSearch:
             baseDN: "ou=users,dc=example,dc=org"
             username: "mail"
@@ -2485,18 +2578,18 @@ ${ldap_root_ca}
 
   store:
     engine: "postgres"
-    dsn: "${postgres_dsn}"
-    encryptionKey: "${DATASTORE_ENCRYPTION_KEY}"
+    dsn: ""
+    encryptionKey: ""
 
   activityStore:
     engine: "postgres"
-    dsn: "${postgres_dsn}"
+    dsn: ""
 
   authStore:
     engine: "postgres"
-    dsn: "${postgres_dsn}"
+    dsn: ""
 EOF
-  chmod 600 "$LOCAL_CONFIG_FILE"
+  chmod 644 "$LOCAL_CONFIG_FILE"
   umask "$previous_umask"
 }
 
@@ -2568,7 +2661,7 @@ ${router_tls_yaml}
     dashboard:
       loadBalancer:
         servers:
-          - url: "http://dashboard:80"
+          - url: "http://dashboard:8080"
     netbird-server:
       loadBalancer:
         servers:
@@ -2629,7 +2722,7 @@ EOF
   if [[ -n "$LOCAL_CLIENT_PROXY_PORT" ]]; then
     client_proxy_yaml=$(cat <<EOF
   client-proxy:
-    image: alpine/socat:1.8.0.3
+    image: alpine/socat:1.8.0.3@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e
     container_name: ${LOCAL_PROJECT_NAME}-client-proxy
     restart: unless-stopped
     networks: [netbird]
@@ -2662,9 +2755,12 @@ x-logging: &default-logging
 
 services:
   traefik:
-    image: traefik:v3.6
+    image: traefik:v3.6@sha256:374b9b3d5a3f760ab16751e76b929c0cd29ccfccb737dc530e53ac7cc8c09991
     container_name: ${LOCAL_PROJECT_NAME}-traefik
     restart: unless-stopped
+    mem_limit: ${LOCAL_TRAEFIK_MEMORY_LIMIT}
+    cpus: ${LOCAL_TRAEFIK_CPU_LIMIT}
+    pids_limit: 256
     networks:
       netbird:
         ipv4_address: ${LOCAL_TRAEFIK_IP}
@@ -2703,6 +2799,13 @@ ${traefik_tls_mounts_yaml}
       retries: 20
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
     logging: *default-logging
 
   dashboard:
@@ -2711,15 +2814,22 @@ ${traefik_tls_mounts_yaml}
       dockerfile: Dockerfile.multistage
       args:
         NEXT_PUBLIC_DASHBOARD_VERSION: "${LOCAL_DASHBOARD_IMAGE_VERSION}"
+        ALPINE_MIRROR: "${NETBIRD_ALPINE_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}"
       labels:
         org.opencontainers.image.revision: "${LOCAL_DASHBOARD_SOURCE_COMMIT_ID}"
+        org.opencontainers.image.version: "${LOCAL_DASHBOARD_IMAGE_VERSION}"
         netbird.local.main-commit: "${LOCAL_DASHBOARD_MAIN_COMMIT_ID}"
+        netbird.local.source-commit: "${LOCAL_DASHBOARD_SOURCE_COMMIT_ID}"
         netbird.local.source-dirty: "${LOCAL_DASHBOARD_SOURCE_DIRTY}"
+        netbird.local.image-version: "${LOCAL_DASHBOARD_IMAGE_VERSION}"
+      provenance: mode=max
+      sbom: true
     image: ${LOCAL_IMAGE_PREFIX}/dashboard:${LOCAL_DASHBOARD_IMAGE_VERSION}
     pull_policy: never
     container_name: ${LOCAL_PROJECT_NAME}-dashboard
     restart: unless-stopped
     mem_limit: ${LOCAL_DASHBOARD_MEMORY_LIMIT}
+    cpus: ${LOCAL_DASHBOARD_CPU_LIMIT}
     pids_limit: 512
     networks: [netbird]
     env_file:
@@ -2728,7 +2838,7 @@ ${traefik_tls_mounts_yaml}
       netbird-server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -2739,6 +2849,39 @@ ${traefik_tls_mounts_yaml}
       - "netbird.local.image-version=${LOCAL_DASHBOARD_IMAGE_VERSION}"
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /run:rw,noexec,nosuid,size=16m,mode=1777
+      - /tmp:rw,noexec,nosuid,size=32m
+    logging: *default-logging
+
+  netbird-data-init:
+    image: ${LOCAL_IMAGE_PREFIX}/netbird-server:${LOCAL_IMAGE_VERSION}
+    pull_policy: never
+    restart: "no"
+    user: "0:0"
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    networks: [netbird]
+    volumes:
+      - netbird_data:/var/lib/netbird
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - >-
+        mkdir -p /var/lib/netbird/tmp;
+        find /var/lib/netbird/tmp -mindepth 1 -maxdepth 1 -type d
+        -name 'geolite*' -exec rm -rf -- {} +;
+        chown -R 10001:10001 /var/lib/netbird
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+    read_only: true
     logging: *default-logging
 
   netbird-server:
@@ -2747,15 +2890,24 @@ ${traefik_tls_mounts_yaml}
       dockerfile: combined/Dockerfile.multistage
       args:
         NETBIRD_VERSION: "${LOCAL_IMAGE_VERSION}"
+        NETBIRD_COMMIT: "${LOCAL_SOURCE_COMMIT_ID}"
+        SOURCE_DATE_EPOCH: "${LOCAL_SOURCE_DATE_EPOCH}"
+        GOPROXY: "${NETBIRD_GO_PROXY:-https://proxy.golang.org,direct}"
       labels:
         org.opencontainers.image.revision: "${LOCAL_SOURCE_COMMIT_ID}"
+        org.opencontainers.image.version: "${LOCAL_IMAGE_VERSION}"
         netbird.local.main-commit: "${LOCAL_MAIN_COMMIT_ID}"
+        netbird.local.source-commit: "${LOCAL_SOURCE_COMMIT_ID}"
         netbird.local.source-dirty: "${LOCAL_SOURCE_DIRTY}"
+        netbird.local.image-version: "${LOCAL_IMAGE_VERSION}"
+      provenance: mode=max
+      sbom: true
     image: ${LOCAL_IMAGE_PREFIX}/netbird-server:${LOCAL_IMAGE_VERSION}
     pull_policy: never
     container_name: ${LOCAL_PROJECT_NAME}-server
     restart: unless-stopped
     mem_limit: ${LOCAL_SERVER_MEMORY_LIMIT}
+    cpus: ${LOCAL_SERVER_CPU_LIMIT}
     pids_limit: 1024
     networks: [netbird]
     ports:
@@ -2764,6 +2916,12 @@ ${traefik_tls_mounts_yaml}
       - netbird_data:/var/lib/netbird
       - ${LOCAL_CONFIG_FILE}:/etc/netbird/config.yaml:ro
     environment:
+      NB_SERVER_AUTH_SECRET: "\${NETBIRD_RELAY_AUTH_SECRET}"
+      NB_AUTH_OWNER_PASSWORD: "\${NETBIRD_ADMIN_PASSWORD}"
+      NB_AUTH_LDAP_BIND_PASSWORD: "\${LDAP_ADMIN_PASSWORD}"
+      NB_STORE_POSTGRES_DSN: "host=postgres port=5432 user=\${POSTGRES_USER} password=\${POSTGRES_PASSWORD} dbname=\${POSTGRES_DB} sslmode=disable TimeZone=UTC"
+      NB_DATASTORE_ENCRYPTION_KEY: "\${NETBIRD_DATASTORE_ENCRYPTION_KEY}"
+      TMPDIR: "/var/lib/netbird/tmp"
       NB_EXPERIMENT_NETWORK_MAP: "false"
       NB_LOCAL_INTEGRATIONS_ENABLED: "true"
       NB_LOCAL_LDAP_SYNC_ENABLED: "true"
@@ -2778,6 +2936,8 @@ ${traefik_tls_mounts_yaml}
         condition: service_healthy
       openldap:
         condition: service_healthy
+      netbird-data-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000"]
       interval: 5s
@@ -2791,15 +2951,23 @@ ${traefik_tls_mounts_yaml}
       - "netbird.local.image-version=${LOCAL_IMAGE_VERSION}"
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     stop_grace_period: 30s
     logging: *default-logging
 
 ${client_proxy_yaml}
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
     container_name: ${LOCAL_PROJECT_NAME}-postgres
     restart: unless-stopped
     mem_limit: ${LOCAL_POSTGRES_MEMORY_LIMIT}
+    cpus: ${LOCAL_POSTGRES_CPU_LIMIT}
     pids_limit: 512
     networks: [netbird]
     environment:
@@ -2816,50 +2984,89 @@ ${client_proxy_yaml}
       - netbird_postgres:/var/lib/postgresql/data
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /run/postgresql:rw,noexec,nosuid,size=16m
+      - /tmp:rw,noexec,nosuid,size=32m
     shm_size: 256mb
     stop_grace_period: 60s
     logging: *default-logging
 
   openldap:
-    image: osixia/openldap:1.5.0
+    build:
+      context: ${LOCAL_REPO_ROOT}/deploy/openldap
+      dockerfile: Dockerfile
+      labels:
+        org.opencontainers.image.revision: "${LOCAL_SOURCE_COMMIT_ID}"
+        org.opencontainers.image.version: "${LOCAL_IMAGE_VERSION}"
+        netbird.local.main-commit: "${LOCAL_MAIN_COMMIT_ID}"
+        netbird.local.source-commit: "${LOCAL_SOURCE_COMMIT_ID}"
+        netbird.local.source-dirty: "${LOCAL_SOURCE_DIRTY}"
+        netbird.local.image-version: "${LOCAL_IMAGE_VERSION}"
+      provenance: mode=max
+      sbom: true
+    image: ${LOCAL_IMAGE_PREFIX}/openldap:${LOCAL_IMAGE_VERSION}
+    pull_policy: never
     container_name: ${LOCAL_PROJECT_NAME}-openldap
     restart: unless-stopped
     mem_limit: ${LOCAL_LDAP_MEMORY_LIMIT}
+    cpus: ${LOCAL_LDAP_CPU_LIMIT}
     pids_limit: 512
     networks: [netbird]
     environment:
-      LDAP_ORGANISATION: "NetBird Local"
-      LDAP_DOMAIN: "example.org"
       LDAP_BASE_DN: "dc=example,dc=org"
       LDAP_ADMIN_PASSWORD: "\${LDAP_ADMIN_PASSWORD}"
-      LDAP_TLS: "true"
-      LDAP_TLS_ENFORCE: "true"
-      LDAP_TLS_VERIFY_CLIENT: "never"
-      LDAP_SEED_INTERNAL_LDAP_TLS_CRT_FILE: "/cert-seed/ldap.crt"
-      LDAP_SEED_INTERNAL_LDAP_TLS_KEY_FILE: "/cert-seed/ldap.key"
-      LDAP_SEED_INTERNAL_LDAP_TLS_CA_CRT_FILE: "/cert-seed/ca.crt"
+      LDAP_BOOTSTRAP_FILE: "/bootstrap/custom.ldif"
+      LDAP_TLS_CERT_FILE: "/cert-seed/ldap.crt"
+      LDAP_TLS_KEY_FILE: "/cert-seed/ldap.key"
+      LDAP_TLS_CA_FILE: "/cert-seed/ca.crt"
     volumes:
       - ldap_data:/var/lib/ldap
-      - ldap_config:/etc/ldap/slapd.d
-      - ${LOCAL_LDAP_BOOTSTRAP_FILE}:/container/service/slapd/assets/config/bootstrap/ldif/custom/50-init.ldif:ro
+      - ${LOCAL_LDAP_BOOTSTRAP_FILE}:/bootstrap/custom.ldif:ro
       - ${LOCAL_LDAP_CERT_FILE}:/cert-seed/ldap.crt:ro
       - ${LOCAL_LDAP_KEY_FILE}:/cert-seed/ldap.key:ro
       - ${LOCAL_LDAP_CA_CERT_FILE}:/cert-seed/ca.crt:ro
-    command: --copy-service
     healthcheck:
-      test: ["CMD-SHELL", "LDAPTLS_REQCERT=never ldapsearch -x -H ldaps://127.0.0.1:636 -b dc=example,dc=org -D cn=admin,dc=example,dc=org -w \$\${LDAP_ADMIN_PASSWORD} >/dev/null"]
+      test: ["CMD-SHELL", "LDAPTLS_CACERT=/cert-seed/ca.crt ldapsearch -x -H ldaps://openldap:636 -b dc=example,dc=org -D cn=admin,dc=example,dc=org -w \$\${LDAP_ADMIN_PASSWORD} >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 10s
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /run:rw,noexec,nosuid,size=16m
+      - /tmp:rw,noexec,nosuid,size=16m
     logging: *default-logging
 
   smoke-test:
-    image: curlimages/curl:8.12.1
+    image: curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6
     profiles: [smoke]
     networks: [netbird]
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
 ${smoke_tls_mount_yaml}
     depends_on:
       traefik:
@@ -2870,7 +3077,6 @@ volumes:
   netbird_data:
   netbird_postgres:
   ldap_data:
-  ldap_config:
 ${traefik_acme_volume_yaml}
 
 networks:
@@ -2981,10 +3187,10 @@ local_run_quick_tunnel_smoke_tests() {
 
   echo "Verifying the browser-trusted public HTTPS path from a container..."
   for attempt in $(seq 1 30); do
-    if docker run --rm curlimages/curl:8.12.1 \
+    if docker run --rm curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6 \
       --fail --silent --show-error --max-time 15 \
       "${LOCAL_BASE_URL}/oauth2/.well-known/openid-configuration" -o /dev/null; then
-      docker run --rm curlimages/curl:8.12.1 \
+      docker run --rm curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6 \
         --fail --silent --show-error --max-time 15 \
         "${LOCAL_BASE_URL}/" -o /dev/null
       return 0
@@ -3035,7 +3241,7 @@ run_local_source_deployment() {
   LOCAL_TLS_MODE="${NETBIRD_TLS_MODE:-auto}"
 	LOCAL_DEPLOYMENT_MODE="${NETBIRD_DEPLOYMENT_MODE:-production}"
 	LOCAL_BOOTSTRAP_TEST_USERS="${NETBIRD_BOOTSTRAP_TEST_USERS:-false}"
-  LOCAL_CLOUDFLARED_IMAGE="${NETBIRD_CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.7.2}"
+  LOCAL_CLOUDFLARED_IMAGE="${NETBIRD_CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.7.2@sha256:4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d}"
   LOCAL_TUNNEL_CONTAINER="${LOCAL_PROJECT_NAME}-cloudflared"
   LOCAL_TUNNEL_BOOTSTRAP_NETWORK="${LOCAL_PROJECT_NAME}-tunnel-bootstrap"
   LOCAL_COMPOSE_NETWORK="${LOCAL_PROJECT_NAME}_netbird"
@@ -3046,11 +3252,17 @@ run_local_source_deployment() {
 	LOCAL_SERVER_MEMORY_LIMIT="${NETBIRD_SERVER_MEMORY_LIMIT:-2g}"
 	LOCAL_POSTGRES_MEMORY_LIMIT="${NETBIRD_POSTGRES_MEMORY_LIMIT:-2g}"
 	LOCAL_LDAP_MEMORY_LIMIT="${NETBIRD_LDAP_MEMORY_LIMIT:-512m}"
+	LOCAL_TRAEFIK_CPU_LIMIT="${NETBIRD_TRAEFIK_CPU_LIMIT:-1.0}"
+	LOCAL_DASHBOARD_CPU_LIMIT="${NETBIRD_DASHBOARD_CPU_LIMIT:-1.0}"
+	LOCAL_SERVER_CPU_LIMIT="${NETBIRD_SERVER_CPU_LIMIT:-2.0}"
+	LOCAL_POSTGRES_CPU_LIMIT="${NETBIRD_POSTGRES_CPU_LIMIT:-2.0}"
+	LOCAL_LDAP_CPU_LIMIT="${NETBIRD_LDAP_CPU_LIMIT:-1.0}"
 	export LOCAL_TRAEFIK_MEMORY_LIMIT LOCAL_DASHBOARD_MEMORY_LIMIT LOCAL_SERVER_MEMORY_LIMIT \
-	  LOCAL_POSTGRES_MEMORY_LIMIT LOCAL_LDAP_MEMORY_LIMIT
+	  LOCAL_POSTGRES_MEMORY_LIMIT LOCAL_LDAP_MEMORY_LIMIT LOCAL_TRAEFIK_CPU_LIMIT \
+	  LOCAL_DASHBOARD_CPU_LIMIT LOCAL_SERVER_CPU_LIMIT LOCAL_POSTGRES_CPU_LIMIT LOCAL_LDAP_CPU_LIMIT
 
-  if [[ "$LOCAL_ACTION" != "deploy" && "$LOCAL_ACTION" != "render" && "$LOCAL_ACTION" != "build" && "$LOCAL_ACTION" != "down" ]]; then
-    echo "NETBIRD_LOCAL_ACTION must be 'deploy', 'render', 'build', or 'down'." > /dev/stderr
+  if [[ "$LOCAL_ACTION" != "deploy" && "$LOCAL_ACTION" != "render" && "$LOCAL_ACTION" != "build" && "$LOCAL_ACTION" != "down" && "$LOCAL_ACTION" != "backup" ]]; then
+    echo "NETBIRD_LOCAL_ACTION must be 'deploy', 'render', 'build', 'backup', or 'down'." > /dev/stderr
     exit 1
   fi
 	if [[ "$LOCAL_DEPLOYMENT_MODE" != "production" && "$LOCAL_DEPLOYMENT_MODE" != "development" ]]; then
@@ -3088,6 +3300,10 @@ run_local_source_deployment() {
 	local_acquire_deployment_lock
   if [[ "$LOCAL_ACTION" == "down" ]]; then
     local_stop_deployment
+    return 0
+  fi
+  if [[ "$LOCAL_ACTION" == "backup" ]]; then
+    local_backup_deployment
     return 0
   fi
   local_resolve_main_commit
@@ -3128,8 +3344,8 @@ run_local_source_deployment() {
     build_options+=(--no-cache)
   fi
 
-  echo "Building local NetBird server ${LOCAL_IMAGE_VERSION} and dashboard ${LOCAL_DASHBOARD_IMAGE_VERSION}..."
-  "${LOCAL_COMPOSE[@]}" "${build_options[@]}" dashboard netbird-server
+  echo "Building local NetBird server ${LOCAL_IMAGE_VERSION}, dashboard ${LOCAL_DASHBOARD_IMAGE_VERSION}, and OpenLDAP..."
+  "${LOCAL_COMPOSE[@]}" "${build_options[@]}" dashboard netbird-server openldap
 
   local local_services=(postgres openldap netbird-server dashboard traefik)
   if [[ -n "$LOCAL_CLIENT_PROXY_PORT" ]]; then

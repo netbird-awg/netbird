@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/netip"
 
@@ -558,7 +559,7 @@ func peerToAccessiblePeer(peer *nbpeer.Peer, dnsDomain string) api.AccessiblePee
 		Connected:   peer.Status.Connected,
 		CountryCode: peer.Location.CountryCode,
 		DnsLabel:    fqdn(peer, dnsDomain),
-		GeonameId:   int(peer.Location.GeoNameID),
+		GeonameId:   apiGeoNameID(peer.Location.GeoNameID),
 		Id:          peer.ID,
 		Ip:          peer.IP.String(),
 		Ipv6:        peerIPv6String(peer),
@@ -586,7 +587,7 @@ func toSinglePeerResponse(peer *nbpeer.Peer, groupsInfo []api.GroupMinimum, dnsD
 		LastSeen:                    peer.Status.LastSeen,
 		Os:                          fmt.Sprintf("%s %s", peer.Meta.OS, osVersion),
 		KernelVersion:               peer.Meta.KernelVersion,
-		GeonameId:                   int(peer.Location.GeoNameID),
+		GeonameId:                   apiGeoNameID(peer.Location.GeoNameID),
 		Version:                     peer.Meta.WtVersion,
 		Groups:                      groupsInfo,
 		SshEnabled:                  peer.SSHEnabled,
@@ -641,7 +642,7 @@ func toPeerListItemResponse(peer *nbpeer.Peer, groupsInfo []api.GroupMinimum, dn
 		LastSeen:                    peer.Status.LastSeen,
 		Os:                          fmt.Sprintf("%s %s", peer.Meta.OS, osVersion),
 		KernelVersion:               peer.Meta.KernelVersion,
-		GeonameId:                   int(peer.Location.GeoNameID),
+		GeonameId:                   apiGeoNameID(peer.Location.GeoNameID),
 		Version:                     peer.Meta.WtVersion,
 		Groups:                      groupsInfo,
 		SshEnabled:                  peer.SSHEnabled,
@@ -672,6 +673,13 @@ func toPeerListItemResponse(peer *nbpeer.Peer, groupsInfo []api.GroupMinimum, dn
 			ServerSshAllowed:      &peer.Meta.Flags.ServerSSHAllowed,
 		},
 	}
+}
+
+func apiGeoNameID(value uint) int {
+	if value > math.MaxInt {
+		return 0
+	}
+	return int(value) // #nosec G115 -- value is bounded by MaxInt above
 }
 
 func toSingleJobResponse(job *types.Job) (*api.JobResponse, error) {

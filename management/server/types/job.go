@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -214,13 +215,16 @@ func (j *Job) buildStreamBundleResponse() (*proto.JobRequest, error) {
 	if err := json.Unmarshal(j.Workload.Parameters, &p); err != nil {
 		return nil, fmt.Errorf("invalid parameters for bundle job: %w", err)
 	}
+	if p.LogFileCount < 1 || p.LogFileCount > 1000 || p.LogFileCount > math.MaxInt32 {
+		return nil, fmt.Errorf("invalid log-file-count: %d", p.LogFileCount)
+	}
 	return &proto.JobRequest{
 		ID: []byte(j.ID),
 		WorkloadParameters: &proto.JobRequest_Bundle{
 			Bundle: &proto.BundleParameters{
 				BundleFor:     p.BundleFor,
 				BundleForTime: int64(p.BundleForTime),
-				LogFileCount:  int32(p.LogFileCount),
+				LogFileCount:  int32(p.LogFileCount), // #nosec G115 -- bounded above
 				Anonymize:     p.Anonymize,
 			},
 		},

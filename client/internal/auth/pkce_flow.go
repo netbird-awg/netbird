@@ -245,6 +245,7 @@ func (p *PKCEAuthorizationFlow) startServer(server *http.Server, tokenChan chan<
 			tr := &http.Transport{
 				TLSClientConfig: &tls.Config{
 					Certificates: []tls.Certificate{*cert},
+					MinVersion:   tls.VersionTLS12,
 				},
 			}
 			sslClient := &http.Client{Transport: tr}

@@ -113,7 +113,8 @@ func NewDeviceAuthorizationFlow(config DeviceAuthProviderConfig) (*DeviceAuthori
 	}
 
 	httpTransport.TLSClientConfig = &tls.Config{
-		RootCAs: certPool,
+		RootCAs:    certPool,
+		MinVersion: tls.VersionTLS12,
 	}
 
 	httpClient := &http.Client{
