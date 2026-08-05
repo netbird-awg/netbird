@@ -317,6 +317,10 @@ func (am *DefaultAccountManager) DeleteUser(ctx context.Context, accountID, init
 		return err
 	}
 
+	if targetUser.AccountID != accountID {
+		return status.NewUserNotFoundError(targetUserID)
+	}
+
 	if targetUser.Role == types.UserRoleOwner {
 		return status.NewOwnerDeletePermissionError()
 	}
