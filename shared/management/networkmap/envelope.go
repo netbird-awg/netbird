@@ -79,6 +79,13 @@ func EnvelopeToNetworkMap(ctx context.Context, env *proto.NetworkMapEnvelope, lo
 	protoNM.RemotePeersIsEmpty = len(remotePeers) == 0
 
 	protoNM.OfflinePeers = AppendRemotePeerConfig(nil, typedNM.OfflinePeers, dnsName, includeIPv6)
+	if err := applyPeerTunnelConfigs(
+		full,
+		protoNM.RemotePeers,
+		protoNM.OfflinePeers,
+	); err != nil {
+		return nil, fmt.Errorf("apply peer tunnel configs: %w", err)
+	}
 
 	firewallRules := ToProtocolFirewallRules(typedNM.FirewallRules, includeIPv6, useSourcePrefixes)
 	protoNM.FirewallRules = firewallRules
@@ -119,6 +126,60 @@ func EnvelopeToNetworkMap(ctx context.Context, env *proto.NetworkMapEnvelope, lo
 		NetworkMap: protoNM,
 		Components: components,
 	}, nil
+}
+
+func applyPeerTunnelConfigs(
+	full *proto.NetworkMapComponentsFull,
+	peerLists ...[]*proto.RemotePeerConfig,
+) error {
+	if full == nil || len(full.GetPeerTunnelConfigs()) == 0 {
+		return nil
+	}
+
+	configs := make(map[string]*proto.PeerTunnelConfigCompact)
+	for i, config := range full.GetPeerTunnelConfigs() {
+		if config == nil {
+			return fmt.Errorf("peer_tunnel_configs[%d] is nil", i)
+		}
+		index := int(config.GetPeerIndex())
+		if index >= len(full.GetPeers()) {
+			return fmt.Errorf(
+				"peer_tunnel_configs[%d] references peer index %d",
+				i,
+				index,
+			)
+		}
+		peer := full.GetPeers()[index]
+		if len(peer.GetWgPubKey()) != 32 {
+			return fmt.Errorf(
+				"peer_tunnel_configs[%d] references an invalid peer key",
+				i,
+			)
+		}
+		key := base64.StdEncoding.EncodeToString(peer.GetWgPubKey())
+		if _, exists := configs[key]; exists {
+			return fmt.Errorf("duplicate tunnel config for peer index %d", index)
+		}
+		configs[key] = config
+	}
+
+	for _, peers := range peerLists {
+		for _, peer := range peers {
+			if peer == nil {
+				continue
+			}
+			config, ok := configs[peer.GetWgPubKey()]
+			if !ok {
+				continue
+			}
+			peer.TunnelMode = config.GetTunnelMode()
+			peer.TunnelProtocolVersion = config.GetProtocolVersion()
+			peer.TunnelProfileRevision = config.GetProfileRevision()
+			peer.TunnelTransitionId = config.GetTransitionId()
+			peer.TunnelEffectiveAt = config.GetEffectiveAt()
+		}
+	}
+	return nil
 }
 
 // mergeProxyPatch folds a ProxyPatch's pre-expanded fragments into the

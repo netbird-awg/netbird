@@ -21,6 +21,8 @@ const (
 	PeerCapabilitySourcePrefixes      int32 = 1
 	PeerCapabilityIPv6Overlay         int32 = 2
 	PeerCapabilityComponentNetworkMap int32 = 3
+	PeerCapabilityHybridAmneziaWG2    int32 = 4
+	PeerCapabilityHybridAmneziaWG3    int32 = 5
 )
 
 // Peer represents a machine connected to the network.
@@ -137,6 +139,20 @@ type File struct {
 	ProcessIsRunning bool
 }
 
+// TunnelRuntimeMeta is the server-persisted Hybrid AWG readiness report.
+type TunnelRuntimeMeta struct {
+	ProtocolVersion      string
+	ProfileRevision      uint64
+	AdapterRevision      string
+	Ready                bool
+	ErrorCode            string
+	EstimatedClockSkewMS int64
+	UpdatedAt            time.Time
+	LastReadyProtocol    string
+	LastReadyRevision    uint64
+	LastReadyAt          time.Time
+}
+
 // Flags defines a set of options to control feature behavior
 type Flags struct {
 	RosenpassEnabled    bool
@@ -175,6 +191,7 @@ type PeerSystemMeta struct { //nolint:revive
 	Files              []File      `gorm:"serializer:json"`
 	Capabilities       []int32     `gorm:"serializer:json"`
 	SyncMessageVersion int
+	TunnelRuntime      TunnelRuntimeMeta `gorm:"serializer:json"`
 }
 
 func (p PeerSystemMeta) isEqual(other PeerSystemMeta) bool {
@@ -198,7 +215,8 @@ func (p PeerSystemMeta) isEmpty() bool {
 		p.SystemManufacturer == "" &&
 		p.Environment.Cloud == "" &&
 		p.Environment.Platform == "" &&
-		len(p.Files) == 0
+		len(p.Files) == 0 &&
+		p.TunnelRuntime == (TunnelRuntimeMeta{})
 }
 
 // AddedWithSSOLogin indicates whether this peer has been added with an SSO login by a user.
@@ -217,6 +235,7 @@ func (p *Peer) ToComponent() *sharedTypes.ComponentPeer {
 	cp := &sharedTypes.ComponentPeer{
 		ID:                     p.ID,
 		Key:                    p.Key,
+		UserID:                 p.UserID,
 		IP:                     p.IP,
 		IPv6:                   p.IPv6,
 		DNSLabel:               p.DNSLabel,
@@ -228,6 +247,18 @@ func (p *Peer) ToComponent() *sharedTypes.ComponentPeer {
 		SupportsIPv6:           p.SupportsIPv6(),
 		LoginExpirationEnabled: p.LoginExpirationEnabled,
 		AddedWithSSOLogin:      p.AddedWithSSOLogin(),
+		SupportsHybridAWG2:     p.SupportsHybridAmneziaWG2(),
+		TunnelRuntime: sharedTypes.TunnelRuntimeInfo{
+			ProtocolVersion:   p.Meta.TunnelRuntime.ProtocolVersion,
+			ProfileRevision:   p.Meta.TunnelRuntime.ProfileRevision,
+			AdapterRevision:   p.Meta.TunnelRuntime.AdapterRevision,
+			Ready:             p.Meta.TunnelRuntime.Ready,
+			ErrorCode:         p.Meta.TunnelRuntime.ErrorCode,
+			UpdatedAt:         p.Meta.TunnelRuntime.UpdatedAt,
+			LastReadyProtocol: p.Meta.TunnelRuntime.LastReadyProtocol,
+			LastReadyRevision: p.Meta.TunnelRuntime.LastReadyRevision,
+			LastReadyAt:       p.Meta.TunnelRuntime.LastReadyAt,
+		},
 	}
 	if p.LastLogin != nil {
 		cp.LastLogin = *p.LastLogin
@@ -256,6 +287,12 @@ func (p *Peer) SupportsSourcePrefixes() bool {
 // Calculate() server-side and emits the components envelope.
 func (p *Peer) SupportsComponentNetworkMap() bool {
 	return p.HasCapability(PeerCapabilityComponentNetworkMap)
+}
+
+// SupportsHybridAmneziaWG2 reports whether the peer can mix standard
+// WireGuard and AWG2 peers in one userspace device.
+func (p *Peer) SupportsHybridAmneziaWG2() bool {
+	return p.HasCapability(PeerCapabilityHybridAmneziaWG2)
 }
 
 func capabilitiesEqual(a, b []int32) bool {
@@ -320,6 +357,11 @@ func (p *Peer) UpdateMetaIfNew(ctx context.Context, meta PeerSystemMeta, newLoca
 	if meta.UIVersion == "" {
 		meta.UIVersion = p.Meta.UIVersion
 	}
+	meta.TunnelRuntime = normalizeTunnelRuntime(
+		p.Meta.TunnelRuntime,
+		meta.TunnelRuntime,
+		time.Now().UTC(),
+	)
 
 	effectiveLocation := p.Location
 	if newLocation != nil {
@@ -449,12 +491,46 @@ func diffMeta(oldMeta, newMeta PeerSystemMeta, oldLocation, newLocation Location
 	if oldMeta.SyncMessageVersion != newMeta.SyncMessageVersion {
 		add("sync_meta_version", fmt.Sprintf("%d", oldMeta.SyncMessageVersion), fmt.Sprintf("%d", newMeta.SyncMessageVersion))
 	}
+	if oldMeta.TunnelRuntime != newMeta.TunnelRuntime {
+		add("tunnel_runtime", oldMeta.TunnelRuntime, newMeta.TunnelRuntime)
+	}
 
 	if !oldLocation.equal(newLocation) {
 		add("connection_ip", oldLocation.ConnectionIP, newLocation.ConnectionIP)
 	}
 
 	return d
+}
+
+func normalizeTunnelRuntime(
+	current,
+	reported TunnelRuntimeMeta,
+	now time.Time,
+) TunnelRuntimeMeta {
+	reported.LastReadyProtocol = current.LastReadyProtocol
+	reported.LastReadyRevision = current.LastReadyRevision
+	reported.LastReadyAt = current.LastReadyAt
+	if reported.Ready &&
+		(!current.Ready ||
+			current.ProtocolVersion != reported.ProtocolVersion ||
+			current.ProfileRevision != reported.ProfileRevision) {
+		reported.LastReadyProtocol = reported.ProtocolVersion
+		reported.LastReadyRevision = reported.ProfileRevision
+		reported.LastReadyAt = now
+	}
+
+	reported.UpdatedAt = time.Time{}
+	currentUpdatedAt := current.UpdatedAt
+	current.UpdatedAt = time.Time{}
+	current.LastReadyProtocol = reported.LastReadyProtocol
+	current.LastReadyRevision = reported.LastReadyRevision
+	current.LastReadyAt = reported.LastReadyAt
+	if current == reported {
+		reported.UpdatedAt = currentUpdatedAt
+		return reported
+	}
+	reported.UpdatedAt = now
+	return reported
 }
 
 // sameMultiset reports whether two slices contain the same elements with the

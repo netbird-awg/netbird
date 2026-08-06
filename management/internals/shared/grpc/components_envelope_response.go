@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"time"
 
 	integrationsConfig "github.com/netbirdio/management-integrations/integrations/config"
 
@@ -9,6 +10,7 @@ import (
 	nbconfig "github.com/netbirdio/netbird/management/internals/server/config"
 	nbpeer "github.com/netbirdio/netbird/management/server/peer"
 	"github.com/netbirdio/netbird/management/server/posture"
+	managementtunnel "github.com/netbirdio/netbird/management/server/tunnel"
 	"github.com/netbirdio/netbird/management/server/types"
 	sharedgrpc "github.com/netbirdio/netbird/shared/management/grpc"
 	"github.com/netbirdio/netbird/shared/management/networkmap"
@@ -49,8 +51,36 @@ func ToComponentSyncResponse(
 	//
 	// TODO (dmitri) consider using invariants?
 	//
+	now := time.Now().UTC()
+	remotePeers := appendComponentPeers(
+		components.Peers,
+		components.RouterPeers,
+	)
+	if proxyPatch != nil {
+		remotePeers = append(
+			remotePeers,
+			proxyPatch.Peers...,
+		)
+		remotePeers = append(
+			remotePeers,
+			proxyPatch.OfflinePeers...,
+		)
+	}
+	tunnelConfigs := planTunnelConfigs(
+		peer.ToComponent(),
+		remotePeers,
+		settings,
+		components.UserTunnelPolicies,
+		now,
+	)
+	components = filterBlockedComponents(components, tunnelConfigs)
 	enableSSH := computeSSHEnabledForPeer(components, peer)
 	peerConfig := toPeerConfig(peer, components.Network, dnsName, settings, httpConfig, deviceFlowConfig, enableSSH, components.ForceRoutingPeerDNSResolution)
+	peerConfig.TunnelProfile = managementtunnel.ProfileForPeer(
+		peer.ToComponent(),
+		settings,
+		now,
+	)
 
 	includeIPv6 := peer.SupportsIPv6() && peer.IPv6.IsValid()
 	useSourcePrefixes := peer.SupportsSourcePrefixes()
@@ -66,7 +96,14 @@ func ToComponentSyncResponse(
 		DNSDomain:        dnsName,
 		DNSForwarderPort: dnsFwdPort,
 		UserIDClaim:      userIDClaim,
-		ProxyPatch:       toProxyPatch(proxyPatch, dnsName, includeIPv6, useSourcePrefixes),
+		ProxyPatch: toProxyPatch(
+			proxyPatch,
+			dnsName,
+			includeIPv6,
+			useSourcePrefixes,
+			tunnelConfigs,
+		),
+		PeerTunnelConfigs: toEnvelopeTunnelConfigs(tunnelConfigs),
 	})
 
 	resp := &proto.SyncResponse{
@@ -104,7 +141,13 @@ func ToComponentSyncResponse(
 // derive them from. Components purity isn't violated: proxy data isn't
 // policy-graph-derived, it's externally injected post-Calculate, so the
 // client merges it on top of its locally-computed NetworkMap.
-func toProxyPatch(nm *types.NetworkMap, dnsName string, includeIPv6, useSourcePrefixes bool) *proto.ProxyPatch {
+func toProxyPatch(
+	nm *types.NetworkMap,
+	dnsName string,
+	includeIPv6,
+	useSourcePrefixes bool,
+	tunnelConfigs map[string]managementtunnel.PeerConfig,
+) *proto.ProxyPatch {
 	if nm == nil {
 		return nil
 	}
@@ -120,6 +163,14 @@ func toProxyPatch(nm *types.NetworkMap, dnsName string, includeIPv6, useSourcePr
 		Routes:             networkmap.ToProtocolRoutes(nm.Routes),
 		RouteFirewallRules: networkmap.ToProtocolRoutesFirewallRules(nm.RoutesFirewallRules),
 	}
+	applyTunnelConfigs(patch.Peers, nm.Peers, tunnelConfigs)
+	applyTunnelConfigs(patch.OfflinePeers, nm.OfflinePeers, tunnelConfigs)
+	patch.Peers = filterBlockedRemoteConfigs(patch.Peers)
+	patch.OfflinePeers = filterBlockedRemoteConfigs(patch.OfflinePeers)
+	patch.Routes = networkmap.ToProtocolRoutes(filterBlockedRoutes(
+		nm.Routes,
+		blockedPeerIDs(tunnelConfigs),
+	))
 	if len(nm.ForwardingRules) > 0 {
 		patch.ForwardingRules = make([]*proto.ForwardingRule, 0, len(nm.ForwardingRules))
 		for _, r := range nm.ForwardingRules {

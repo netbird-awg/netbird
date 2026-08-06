@@ -294,6 +294,30 @@ func (h *handler) updateAccountRequestSettings(req api.PutApiAccountsAccountIdJS
 			AgentNetwork: req.Settings.DashboardFeatures.AgentNetwork,
 		}
 	}
+	if req.Settings.TunnelPolicy != nil {
+		if !req.Settings.TunnelPolicy.Valid() {
+			return nil, status.Errorf(status.InvalidArgument, "invalid tunnel policy")
+		}
+		returnSettings.TunnelPolicy = types.TunnelAccountPolicy(
+			*req.Settings.TunnelPolicy,
+		)
+	}
+	if req.Settings.TunnelProfile != nil {
+		parameters, err := json.Marshal(req.Settings.TunnelProfile.Parameters)
+		if err != nil {
+			return nil, status.Errorf(
+				status.InvalidArgument,
+				"invalid tunnel profile parameters",
+			)
+		}
+		returnSettings.TunnelProfile = &types.TunnelProfile{
+			ProtocolVersion: string(
+				req.Settings.TunnelProfile.ProtocolVersion,
+			),
+			Revision:   req.Settings.TunnelProfile.Revision,
+			Parameters: parameters,
+		}
+	}
 
 	if returnSettings.AgentNetworkOnly &&
 		(returnSettings.DashboardFeatures == nil ||
@@ -437,6 +461,11 @@ func toAccountResponse(accountID string, settings *types.Settings, meta *types.A
 		LocalAuthDisabled:               &settings.LocalAuthDisabled,
 		LocalMfaEnabled:                 &settings.LocalMfaEnabled,
 	}
+	if settings.TunnelPolicy != "" {
+		tunnelPolicy := api.AccountSettingsTunnelPolicy(settings.TunnelPolicy)
+		apiSettings.TunnelPolicy = &tunnelPolicy
+	}
+	apiSettings.TunnelProfile = toAPITunnelProfile(settings.TunnelProfile)
 
 	if settings.NetworkRange.IsValid() {
 		networkRangeStr := settings.NetworkRange.String()
@@ -476,4 +505,30 @@ func toAccountResponse(accountID string, settings *types.Settings, meta *types.A
 		DomainCategory: meta.DomainCategory,
 		Onboarding:     apiOnboarding,
 	}
+}
+
+func toAPITunnelProfile(profile *types.TunnelProfile) *api.TunnelProfile {
+	if profile == nil {
+		return nil
+	}
+	parameters := make(map[string]interface{})
+	if err := json.Unmarshal(profile.Parameters, &parameters); err != nil {
+		log.Warnf(
+			"decode stored tunnel profile revision %d: %v",
+			profile.Revision,
+			err,
+		)
+		return nil
+	}
+	result := &api.TunnelProfile{
+		ProtocolVersion: api.TunnelProfileProtocolVersion(
+			profile.ProtocolVersion,
+		),
+		Revision:   profile.Revision,
+		Parameters: parameters,
+	}
+	if !profile.UpdatedAt.IsZero() {
+		result.UpdatedAt = &profile.UpdatedAt
+	}
+	return result
 }

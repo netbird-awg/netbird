@@ -19,6 +19,7 @@ import (
 	"github.com/netbirdio/netbird/client/iface/configurer"
 	"github.com/netbirdio/netbird/client/iface/device"
 	nbnetstack "github.com/netbirdio/netbird/client/iface/netstack"
+	"github.com/netbirdio/netbird/client/iface/tunnel"
 	"github.com/netbirdio/netbird/client/iface/udpmux"
 	"github.com/netbirdio/netbird/client/iface/wgaddr"
 	"github.com/netbirdio/netbird/client/iface/wgproxy"
@@ -36,6 +37,8 @@ const (
 var (
 	// ErrIfaceNotFound is returned when the WireGuard interface is not found
 	ErrIfaceNotFound = fmt.Errorf("wireguard interface not found")
+	// ErrTunnelConfigUnsupported is returned by non-hybrid WireGuard adapters.
+	ErrTunnelConfigUnsupported = fmt.Errorf("tunnel configuration is not supported")
 )
 
 // ValidateMTU validates that MTU is within acceptable range
@@ -56,14 +59,15 @@ type wgProxyFactory interface {
 }
 
 type WGIFaceOpts struct {
-	IFaceName    string
-	Address      wgaddr.Address
-	WGPort       int
-	WGPrivKey    string
-	MTU          uint16
-	MobileArgs   *device.MobileIFaceArguments
-	TransportNet transport.Net
-	DisableDNS   bool
+	IFaceName      string
+	Address        wgaddr.Address
+	WGPort         int
+	WGPrivKey      string
+	MTU            uint16
+	MobileArgs     *device.MobileIFaceArguments
+	TransportNet   transport.Net
+	DisableDNS     bool
+	ForceUserspace bool
 }
 
 // WGIface represents an interface instance
@@ -75,6 +79,11 @@ type WGIface struct {
 	configurer     device.WGConfigurer
 	filter         device.PacketFilter
 	wgProxyFactory wgProxyFactory
+}
+
+type tunnelConfigurer interface {
+	ConfigureTunnelProfile(profile *tunnel.Profile) error
+	SetPeerTunnelMode(peerKey string, mode tunnel.Mode, profileRevision uint64) error
 }
 
 func (w *WGIface) GetProxy() wgproxy.Proxy {
@@ -159,6 +168,38 @@ func (w *WGIface) UpdatePeer(peerKey string, allowedIps []netip.Prefix, keepAliv
 
 	log.Debugf("updating interface %s peer %s, endpoint %s, allowedIPs %v", w.tun.DeviceName(), peerKey, endpoint, allowedIps)
 	return w.configurer.UpdatePeer(peerKey, allowedIps, keepAlive, endpoint, preSharedKey)
+}
+
+// ConfigureTunnelProfile publishes a profile to a hybrid userspace device.
+func (w *WGIface) ConfigureTunnelProfile(profile *tunnel.Profile) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.configurer == nil {
+		return ErrIfaceNotFound
+	}
+	configurer, ok := w.configurer.(tunnelConfigurer)
+	if !ok {
+		return ErrTunnelConfigUnsupported
+	}
+	return configurer.ConfigureTunnelProfile(profile)
+}
+
+// SetPeerTunnelMode selects the wire format for a hybrid userspace peer.
+func (w *WGIface) SetPeerTunnelMode(
+	peerKey string,
+	mode tunnel.Mode,
+	profileRevision uint64,
+) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.configurer == nil {
+		return ErrIfaceNotFound
+	}
+	configurer, ok := w.configurer.(tunnelConfigurer)
+	if !ok {
+		return ErrTunnelConfigUnsupported
+	}
+	return configurer.SetPeerTunnelMode(peerKey, mode, profileRevision)
 }
 
 func (w *WGIface) RemoveEndpointAddress(peerKey string) error {

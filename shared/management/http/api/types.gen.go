@@ -38,6 +38,27 @@ func (e AccessRestrictionsCrowdsecMode) Valid() bool {
 	}
 }
 
+// Defines values for AccountSettingsTunnelPolicy.
+const (
+	AccountSettingsTunnelPolicyPreferAwg  AccountSettingsTunnelPolicy = "prefer_awg"
+	AccountSettingsTunnelPolicyRequireAwg AccountSettingsTunnelPolicy = "require_awg"
+	AccountSettingsTunnelPolicyStandard   AccountSettingsTunnelPolicy = "standard"
+)
+
+// Valid indicates whether the value is a known member of the AccountSettingsTunnelPolicy enum.
+func (e AccountSettingsTunnelPolicy) Valid() bool {
+	switch e {
+	case AccountSettingsTunnelPolicyPreferAwg:
+		return true
+	case AccountSettingsTunnelPolicyRequireAwg:
+		return true
+	case AccountSettingsTunnelPolicyStandard:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AgentNetworkCatalogProviderKind.
 const (
 	AgentNetworkCatalogProviderKindCustom   AgentNetworkCatalogProviderKind = "custom"
@@ -1166,6 +1187,21 @@ func (e TenantResponseStatus) Valid() bool {
 	}
 }
 
+// Defines values for TunnelProfileProtocolVersion.
+const (
+	TunnelProfileProtocolVersionAwg2 TunnelProfileProtocolVersion = "awg2"
+)
+
+// Valid indicates whether the value is a known member of the TunnelProfileProtocolVersion enum.
+func (e TunnelProfileProtocolVersion) Valid() bool {
+	switch e {
+	case TunnelProfileProtocolVersionAwg2:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserStatus.
 const (
 	UserStatusActive  UserStatus = "active"
@@ -1181,6 +1217,48 @@ func (e UserStatus) Valid() bool {
 	case UserStatusBlocked:
 		return true
 	case UserStatusInvited:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserTunnelPolicy.
+const (
+	UserTunnelPolicyInherit      UserTunnelPolicy = "inherit"
+	UserTunnelPolicyPreferAwg    UserTunnelPolicy = "prefer_awg"
+	UserTunnelPolicyStandardOnly UserTunnelPolicy = "standard_only"
+)
+
+// Valid indicates whether the value is a known member of the UserTunnelPolicy enum.
+func (e UserTunnelPolicy) Valid() bool {
+	switch e {
+	case UserTunnelPolicyInherit:
+		return true
+	case UserTunnelPolicyPreferAwg:
+		return true
+	case UserTunnelPolicyStandardOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserRequestTunnelPolicy.
+const (
+	UserRequestTunnelPolicyInherit      UserRequestTunnelPolicy = "inherit"
+	UserRequestTunnelPolicyPreferAwg    UserRequestTunnelPolicy = "prefer_awg"
+	UserRequestTunnelPolicyStandardOnly UserRequestTunnelPolicy = "standard_only"
+)
+
+// Valid indicates whether the value is a known member of the UserRequestTunnelPolicy enum.
+func (e UserRequestTunnelPolicy) Valid() bool {
+	switch e {
+	case UserRequestTunnelPolicyInherit:
+		return true
+	case UserRequestTunnelPolicyPreferAwg:
+		return true
+	case UserRequestTunnelPolicyStandardOnly:
 		return true
 	default:
 		return false
@@ -1728,7 +1806,16 @@ type AccountSettings struct {
 
 	// RoutingPeerDnsResolutionEnabled Enables or disables DNS resolution on the routing peers
 	RoutingPeerDnsResolutionEnabled *bool `json:"routing_peer_dns_resolution_enabled,omitempty"`
+
+	// TunnelPolicy Selects the account-wide tunnel compatibility policy.
+	TunnelPolicy *AccountSettingsTunnelPolicy `json:"tunnel_policy,omitempty"`
+
+	// TunnelProfile Account-wide, immutable-revision AmneziaWG tunnel profile.
+	TunnelProfile *TunnelProfile `json:"tunnel_profile,omitempty"`
 }
+
+// AccountSettingsTunnelPolicy Selects the account-wide tunnel compatibility policy.
+type AccountSettingsTunnelPolicy string
 
 // AgentNetworkAccessLog One per-request agent-network (LLM) access log entry with flattened, queryable LLM dimensions.
 type AgentNetworkAccessLog struct {
@@ -5454,6 +5541,24 @@ type TenantResponse struct {
 // TenantResponseStatus The status of the tenant
 type TenantResponseStatus string
 
+// TunnelProfile Account-wide, immutable-revision AmneziaWG tunnel profile.
+type TunnelProfile struct {
+	// Parameters Bounded protocol parameters validated by Management.
+	Parameters map[string]interface{} `json:"parameters"`
+
+	// ProtocolVersion Obfuscation protocol implemented by compatible clients.
+	ProtocolVersion TunnelProfileProtocolVersion `json:"protocol_version"`
+
+	// Revision Monotonically increasing profile revision.
+	Revision uint64 `json:"revision"`
+
+	// UpdatedAt Server-assigned profile update time.
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+// TunnelProfileProtocolVersion Obfuscation protocol implemented by compatible clients.
+type TunnelProfileProtocolVersion string
+
 // UpdateAzureIntegrationRequest defines model for UpdateAzureIntegrationRequest.
 type UpdateAzureIntegrationRequest struct {
 	// ClientId Azure AD application (client) ID
@@ -5606,10 +5711,16 @@ type User struct {
 
 	// Status User's status
 	Status UserStatus `json:"status"`
+
+	// TunnelPolicy User-level override for automatic tunnel selection.
+	TunnelPolicy *UserTunnelPolicy `json:"tunnel_policy,omitempty"`
 }
 
 // UserStatus User's status
 type UserStatus string
+
+// UserTunnelPolicy User-level override for automatic tunnel selection.
+type UserTunnelPolicy string
 
 // UserCreateRequest defines model for UserCreateRequest.
 type UserCreateRequest struct {
@@ -5739,7 +5850,13 @@ type UserRequest struct {
 
 	// Role User's NetBird account role
 	Role string `json:"role"`
+
+	// TunnelPolicy User-level override for automatic tunnel selection.
+	TunnelPolicy *UserRequestTunnelPolicy `json:"tunnel_policy,omitempty"`
 }
+
+// UserRequestTunnelPolicy User-level override for automatic tunnel selection.
+type UserRequestTunnelPolicy string
 
 // WebhookTarget Target configuration for webhook notification channels.
 type WebhookTarget struct {

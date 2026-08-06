@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	b64 "encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/netip"
@@ -321,6 +322,18 @@ func Test_AccountSettings_SaveAndRetrieve(t *testing.T) {
 			reflectedDf := reflect.ValueOf(&df).Elem()
 			field.Set(reflectedDf.Addr())
 			return 1, nil
+		}).WithCustomFieldSetter(
+		reflect.PointerTo(reflect.TypeOf(types.TunnelProfile{})), func(this *testing_helpers.PopulateFields, field reflect.Value) (int, error) {
+			profile := types.TunnelProfile{
+				ProtocolVersion: "awg2",
+				Revision:        1,
+				Parameters: json.RawMessage(
+					`{"h1":"101","h2":"102","h3":"103","h4":"104"}`,
+				),
+				UpdatedAt: time.Now().UTC(),
+			}
+			field.Set(reflect.ValueOf(&profile))
+			return 1, nil
 		}).WithSkippedTag("gorm", "-")
 
 	runTestForAllEngines(t, "", func(t *testing.T, store Store) {
@@ -331,7 +344,7 @@ func Test_AccountSettings_SaveAndRetrieve(t *testing.T) {
 		settings := types.Settings{}
 		numOfExportedFields, err := populateFields.PopulateAll(reflect.ValueOf(&settings).Elem())
 		assert.NoError(t, err)
-		assert.Equal(t, 27, numOfExportedFields)
+		assert.Equal(t, 30, numOfExportedFields)
 		account.Settings = &settings
 
 		err = store.SaveAccount(context.Background(), account)

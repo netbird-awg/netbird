@@ -13,6 +13,7 @@ import (
 type ComponentPeer struct {
 	ID                     string
 	Key                    string
+	UserID                 string
 	IP                     netip.Addr
 	IPv6                   netip.Addr
 	DNSLabel               string
@@ -25,6 +26,27 @@ type ComponentPeer struct {
 	LoginExpirationEnabled bool
 	AddedWithSSOLogin      bool
 	LastLogin              time.Time
+	SupportsHybridAWG2     bool
+	TunnelRuntime          TunnelRuntimeInfo
+}
+
+// TunnelRuntimeInfo contains trusted server-side Hybrid AWG readiness state.
+type TunnelRuntimeInfo struct {
+	ProtocolVersion   string
+	ProfileRevision   uint64
+	AdapterRevision   string
+	Ready             bool
+	ErrorCode         string
+	UpdatedAt         time.Time
+	LastReadyProtocol string
+	LastReadyRevision uint64
+	LastReadyAt       time.Time
+}
+
+// TunnelUserPolicyInfo contains a persisted user-level tunnel override.
+type TunnelUserPolicyInfo struct {
+	Policy    string
+	UpdatedAt time.Time
 }
 
 // FQDN returns the peer's FQDN combined of the peer's DNS label and the system's DNS domain.

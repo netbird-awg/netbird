@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"strconv"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	nbdns "github.com/netbirdio/netbird/dns"
 	"github.com/netbirdio/netbird/management/server/types"
 	nbroute "github.com/netbirdio/netbird/route"
@@ -33,6 +35,18 @@ type ComponentsEnvelopeInput struct {
 	// external controllers (BYOP/port-forwarding). Nil when no proxy data
 	// is present; encoder skips the field in that case.
 	ProxyPatch *proto.ProxyPatch
+	// PeerTunnelConfigs is keyed by ComponentPeer.ID and is specific to the
+	// receiving peer.
+	PeerTunnelConfigs map[string]PeerTunnelConfig
+}
+
+// PeerTunnelConfig is a server-computed symmetric tunnel decision.
+type PeerTunnelConfig struct {
+	Mode            proto.TunnelMode
+	ProtocolVersion string
+	ProfileRevision uint64
+	TransitionID    string
+	EffectiveAt     *timestamppb.Timestamp
 }
 
 // EncodeNetworkMapEnvelope converts NetworkMapComponents into the component
@@ -120,11 +134,36 @@ func EncodeNetworkMapEnvelope(in ComponentsEnvelopeInput) *proto.NetworkMapEnvel
 		GroupIdToUserIds:    enc.encodeGroupIDToUserIDs(c.GroupIDToUserIDs),
 		AllowedUserIds:      stringSetToSlice(c.AllowedUserIDs),
 		PostureFailedPeers:  enc.encodePostureFailedPeers(c.PostureFailedPeers),
+		PeerTunnelConfigs:   enc.encodePeerTunnelConfigs(in.PeerTunnelConfigs),
 	}
 
 	return &proto.NetworkMapEnvelope{
 		Payload: &proto.NetworkMapEnvelope_Full{Full: full},
 	}
+}
+
+func (e *componentEncoder) encodePeerTunnelConfigs(
+	configs map[string]PeerTunnelConfig,
+) []*proto.PeerTunnelConfigCompact {
+	if len(configs) == 0 {
+		return nil
+	}
+	result := make([]*proto.PeerTunnelConfigCompact, 0, len(configs))
+	for peerID, config := range configs {
+		index, ok := e.peerOrder[peerID]
+		if !ok {
+			continue
+		}
+		result = append(result, &proto.PeerTunnelConfigCompact{
+			PeerIndex:       index,
+			TunnelMode:      config.Mode,
+			ProtocolVersion: config.ProtocolVersion,
+			ProfileRevision: config.ProfileRevision,
+			TransitionId:    config.TransitionID,
+			EffectiveAt:     config.EffectiveAt,
+		})
+	}
+	return result
 }
 
 // networkSerial returns c.Network.CurrentSerial() with a nil guard. The

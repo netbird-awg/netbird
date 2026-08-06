@@ -22,6 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.zx2c4.com/wireguard/tun/netstack"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+	pbproto "google.golang.org/protobuf/proto"
 
 	nberrors "github.com/netbirdio/netbird/client/errors"
 	"github.com/netbirdio/netbird/client/firewall"
@@ -31,6 +32,7 @@ import (
 	"github.com/netbirdio/netbird/client/iface"
 	"github.com/netbirdio/netbird/client/iface/device"
 	nbnetstack "github.com/netbirdio/netbird/client/iface/netstack"
+	"github.com/netbirdio/netbird/client/iface/tunnel"
 	"github.com/netbirdio/netbird/client/iface/udpmux"
 	"github.com/netbirdio/netbird/client/iface/wgaddr"
 	"github.com/netbirdio/netbird/client/internal/acl"
@@ -108,6 +110,8 @@ type EngineConfig struct {
 
 	// WgPrivateKey is a Wireguard private key of our peer (it MUST never leave the machine)
 	WgPrivateKey wgtypes.Key
+
+	TunnelProfile *tunnel.Profile
 
 	// NetworkMonitor is a flag to enable network monitoring
 	NetworkMonitor bool
@@ -231,6 +235,11 @@ type Engine struct {
 	// peers. Guarded by syncMsgMux.
 	latestComponents *types.NetworkMapComponents
 
+	// peerTunnelStates is guarded by syncMsgMux.
+	peerTunnelStates map[string]peerTunnelState
+	// pendingTunnelTransitions is guarded by syncMsgMux.
+	pendingTunnelTransitions map[string]pendingTunnelTransition
+
 	networkMonitor *networkmonitor.NetworkMonitor
 
 	sshServer sshServer
@@ -311,6 +320,26 @@ type localIpUpdater interface {
 	UpdateLocalIPs() error
 }
 
+type hybridTunnelConfigurer interface {
+	ConfigureTunnelProfile(profile *tunnel.Profile) error
+	SetPeerTunnelMode(peerKey string, mode tunnel.Mode, profileRevision uint64) error
+}
+
+type peerTunnelState struct {
+	mode            tunnel.Mode
+	protocolVersion string
+	profileRevision uint64
+	transitionID    string
+	effectiveAt     int64
+}
+
+type pendingTunnelTransition struct {
+	transitionID    string
+	profileRevision uint64
+	effectiveAt     int64
+	cancel          context.CancelFunc
+}
+
 // NewEngine creates a new Connection Engine with probes attached
 func NewEngine(
 	clientCtx context.Context,
@@ -324,31 +353,33 @@ func NewEngine(
 	// than in Start.
 	ctx, cancel := context.WithCancel(clientCtx)
 	engine := &Engine{
-		clientCtx:          clientCtx,
-		clientCancel:       clientCancel,
-		ctx:                ctx,
-		cancel:             cancel,
-		signal:             services.SignalClient,
-		signaler:           peer.NewSignaler(services.SignalClient, config.WgPrivateKey),
-		mgmClient:          services.MgmClient,
-		relayManager:       services.RelayManager,
-		peerStore:          peerstore.NewConnStore(),
-		syncMsgMux:         &sync.Mutex{},
-		config:             config,
-		mobileDep:          mobileDep,
-		STUNs:              []*stun.URI{},
-		TURNs:              []*stun.URI{},
-		networkSerial:      0,
-		statusRecorder:     services.StatusRecorder,
-		stateManager:       services.StateManager,
-		portForwardManager: portforward.NewManager(),
-		checks:             services.Checks,
-		probeStunTurn:      relay.NewStunTurnProbe(relay.DefaultCacheTTL),
-		jobExecutor:        jobexec.NewExecutor(),
-		clientMetrics:      services.ClientMetrics,
-		metricsCtx:         services.MetricsCtx,
-		updateManager:      services.UpdateManager,
-		syncStoreDir:       config.StateDir,
+		clientCtx:                clientCtx,
+		clientCancel:             clientCancel,
+		ctx:                      ctx,
+		cancel:                   cancel,
+		signal:                   services.SignalClient,
+		signaler:                 peer.NewSignaler(services.SignalClient, config.WgPrivateKey),
+		mgmClient:                services.MgmClient,
+		relayManager:             services.RelayManager,
+		peerStore:                peerstore.NewConnStore(),
+		syncMsgMux:               &sync.Mutex{},
+		config:                   config,
+		mobileDep:                mobileDep,
+		STUNs:                    []*stun.URI{},
+		TURNs:                    []*stun.URI{},
+		networkSerial:            0,
+		statusRecorder:           services.StatusRecorder,
+		stateManager:             services.StateManager,
+		portForwardManager:       portforward.NewManager(),
+		checks:                   services.Checks,
+		probeStunTurn:            relay.NewStunTurnProbe(relay.DefaultCacheTTL),
+		jobExecutor:              jobexec.NewExecutor(),
+		clientMetrics:            services.ClientMetrics,
+		metricsCtx:               services.MetricsCtx,
+		updateManager:            services.UpdateManager,
+		syncStoreDir:             config.StateDir,
+		peerTunnelStates:         make(map[string]peerTunnelState),
+		pendingTunnelTransitions: make(map[string]pendingTunnelTransition),
 	}
 	// sessionWatcher keeps the SubscribeStatus consumers in sync with the
 	// session expiry deadline. Deadline-change ticks come for free via
@@ -608,6 +639,11 @@ func (e *Engine) Start(netbirdConfig *mgmProto.NetbirdConfig, mgmtURL *url.URL) 
 		log.Errorf("failed creating tunnel interface %s: [%s]", e.config.WgIfaceName, err.Error())
 		return fmt.Errorf("create wg interface: %w", err)
 	}
+	if e.config.TunnelProfile != nil {
+		if err := wgIface.ConfigureTunnelProfile(e.config.TunnelProfile); err != nil {
+			return fmt.Errorf("configure tunnel profile: %w", err)
+		}
+	}
 
 	if filteredDevice := e.wgInterface.GetDevice(); filteredDevice != nil {
 		filteredDevice.SetPanicHandler(e.triggerClientRestart)
@@ -834,6 +870,16 @@ func (e *Engine) modifyPeers(peersUpdate []*mgmProto.RemotePeerConfig) error {
 			continue
 		}
 
+		desiredTunnelState, err := e.peerTunnelState(p)
+		if err != nil {
+			return fmt.Errorf("resolve peer %s tunnel mode: %w", peerPubKey, err)
+		}
+		currentTunnelState, ok := e.peerTunnelStates[peerPubKey]
+		if !ok || currentTunnelState != desiredTunnelState {
+			modified = append(modified, p)
+			continue
+		}
+
 		if currentPeer.AgentVersionString() != p.AgentVersion {
 			modified = append(modified, p)
 			continue
@@ -906,6 +952,8 @@ func (e *Engine) removePeer(peerKey string) error {
 	log.Debugf("removing peer from engine %s", peerKey)
 
 	e.connMgr.RemovePeerConn(peerKey)
+	delete(e.peerTunnelStates, peerKey)
+	e.cancelPeerTunnelTransition(peerKey)
 
 	err := e.statusRecorder.RemovePeer(peerKey)
 	if err != nil {
@@ -1251,6 +1299,14 @@ func (e *Engine) applyInfoFlags(info *system.Info) {
 		e.config.EnableSSHRemotePortForwarding,
 		e.config.DisableSSHAuth,
 	)
+	if profile := e.config.TunnelProfile; profile != nil {
+		info.TunnelRuntime = &system.TunnelRuntimeInfo{
+			ProtocolVersion: profile.ProtocolVersion,
+			ProfileRevision: profile.Revision,
+			AdapterRevision: tunnel.AdapterRevision,
+			Ready:           true,
+		}
+	}
 }
 
 // overlayAddresses returns our own WireGuard overlay address (v4 and v6) so it
@@ -1286,6 +1342,10 @@ func (e *Engine) updateConfig(conf *mgmProto.PeerConfig) error {
 		return ErrResetConnection
 	}
 
+	if err := e.updateTunnelProfile(conf.GetTunnelProfile()); err != nil {
+		return err
+	}
+
 	if conf.GetSshConfig() != nil {
 		if err := e.updateSSH(conf.GetSshConfig()); err != nil {
 			log.Warnf("failed handling SSH server setup: %v", err)
@@ -1303,6 +1363,36 @@ func (e *Engine) updateConfig(conf *mgmProto.PeerConfig) error {
 	e.statusRecorder.UpdateLocalPeerState(state)
 
 	return nil
+}
+
+func (e *Engine) updateTunnelProfile(protoProfile *mgmProto.TunnelProfile) error {
+	var next *tunnel.Profile
+	if protoProfile != nil {
+		var err error
+		next, err = tunnelProfileFromProto(protoProfile)
+		if err != nil {
+			return fmt.Errorf("parse updated tunnel profile: %w", err)
+		}
+	}
+	current := e.config.TunnelProfile
+	if current.Equal(next) {
+		return nil
+	}
+	if current == nil || next == nil {
+		_ = CtxGetState(e.ctx).Wrap(ErrResetConnection)
+		e.clientCancel()
+		return ErrResetConnection
+	}
+	if next.Revision <= current.Revision {
+		return fmt.Errorf(
+			"tunnel profile revision %d does not advance beyond %d",
+			next.Revision,
+			current.Revision,
+		)
+	}
+	_ = CtxGetState(e.ctx).Wrap(ErrResetConnection)
+	e.clientCancel()
+	return ErrResetConnection
 }
 
 // hasIPv6Changed reports whether the IPv6 overlay address in the peer config
@@ -1587,9 +1677,14 @@ func (e *Engine) reconcilePeers(networkMap *mgmProto.NetworkMap) ([]*mgmProto.Re
 	localPubKey := e.config.WgPrivateKey.PublicKey().String()
 	remotePeers := make([]*mgmProto.RemotePeerConfig, 0, len(networkMap.GetRemotePeers()))
 	for _, p := range networkMap.GetRemotePeers() {
-		if p.GetWgPubKey() != localPubKey {
-			remotePeers = append(remotePeers, p)
+		if p == nil || p.GetWgPubKey() == localPubKey {
+			continue
 		}
+		if p.GetTunnelMode() == mgmProto.TunnelMode_TunnelModeBlocked {
+			log.Debugf("management blocked tunnel to peer %s", p.GetWgPubKey())
+			continue
+		}
+		remotePeers = append(remotePeers, p)
 	}
 
 	// cleanup request, most likely our peer has been deleted
@@ -1620,6 +1715,10 @@ func (e *Engine) reconcilePeers(networkMap *mgmProto.NetworkMap) ([]*mgmProto.Re
 	err = e.addNewPeers(remotePeers)
 	done()
 	if err != nil {
+		return nil, err
+	}
+
+	if err := e.syncPeerTunnelTransitions(remotePeers); err != nil {
 		return nil, err
 	}
 
@@ -1847,9 +1946,21 @@ func (e *Engine) addNewPeer(peerConfig *mgmProto.RemotePeerConfig) error {
 		return fmt.Errorf("peer %s has no usable AllowedIPs", peerKey)
 	}
 
+	tunnelState, err := e.peerTunnelState(peerConfig)
+	if err != nil {
+		return fmt.Errorf("resolve peer tunnel mode: %w", err)
+	}
+
 	conn, err := e.createPeerConn(peerKey, peerIPs, peerConfig.AgentVersion)
 	if err != nil {
 		return fmt.Errorf("create peer connection: %w", err)
+	}
+	if err := e.configurePeerTunnelState(peerKey, tunnelState); err != nil {
+		conn.Close(false)
+		if cleanupErr := e.wgInterface.RemovePeer(peerKey); cleanupErr != nil {
+			log.Debugf("cleanup peer after tunnel configuration error: %v", cleanupErr)
+		}
+		return err
 	}
 
 	peerV4, peerV6 := overlayAddrsFromAllowedIPs(peerConfig.GetAllowedIps(), e.wgInterface.Address().IPv6Net)
@@ -1862,7 +1973,248 @@ func (e *Engine) addNewPeer(peerConfig *mgmProto.RemotePeerConfig) error {
 		conn.Close(false)
 		return fmt.Errorf("peer already exists: %s", peerKey)
 	}
+	e.peerTunnelStates[peerKey] = tunnelState
 
+	return nil
+}
+
+func (e *Engine) peerTunnelState(
+	peerConfig *mgmProto.RemotePeerConfig,
+) (peerTunnelState, error) {
+	target, future, err := e.targetPeerTunnelState(peerConfig, time.Now())
+	if err != nil {
+		return peerTunnelState{}, err
+	}
+	if !future {
+		return target, nil
+	}
+	if current, ok := e.peerTunnelStates[peerConfig.GetWgPubKey()]; ok {
+		return current, nil
+	}
+	if target.mode == tunnel.ModeStandard && e.config.TunnelProfile != nil {
+		return peerTunnelState{
+			mode:            tunnel.ModeAmneziaWG,
+			protocolVersion: e.config.TunnelProfile.ProtocolVersion,
+			profileRevision: e.config.TunnelProfile.Revision,
+		}, nil
+	}
+	return peerTunnelState{mode: tunnel.ModeStandard}, nil
+}
+
+func (e *Engine) targetPeerTunnelState(
+	peerConfig *mgmProto.RemotePeerConfig,
+	now time.Time,
+) (peerTunnelState, bool, error) {
+	switch peerConfig.GetTunnelMode() {
+	case mgmProto.TunnelMode_TunnelModeStandard:
+		if peerConfig.GetTunnelProfileRevision() != 0 {
+			return peerTunnelState{}, false, errors.New(
+				"standard peer has a non-zero tunnel profile revision",
+			)
+		}
+		return transitionState(tunnel.ModeStandard, "", 0, peerConfig, now)
+
+	case mgmProto.TunnelMode_TunnelModeAmneziaWG:
+		profile := e.config.TunnelProfile
+		if profile == nil {
+			return peerTunnelState{}, false, errors.New(
+				"AmneziaWG peer received without a local tunnel profile",
+			)
+		}
+		if peerConfig.GetTunnelProtocolVersion() != profile.ProtocolVersion {
+			return peerTunnelState{}, false, fmt.Errorf(
+				"peer protocol %q does not match local protocol %q",
+				peerConfig.GetTunnelProtocolVersion(),
+				profile.ProtocolVersion,
+			)
+		}
+		if peerConfig.GetTunnelProfileRevision() != profile.Revision {
+			return peerTunnelState{}, false, fmt.Errorf(
+				"peer profile revision %d does not match local revision %d",
+				peerConfig.GetTunnelProfileRevision(),
+				profile.Revision,
+			)
+		}
+		return transitionState(
+			tunnel.ModeAmneziaWG,
+			profile.ProtocolVersion,
+			profile.Revision,
+			peerConfig,
+			now,
+		)
+
+	default:
+		return peerTunnelState{}, false, fmt.Errorf(
+			"unsupported tunnel mode %d",
+			peerConfig.GetTunnelMode(),
+		)
+	}
+}
+
+func transitionState(
+	mode tunnel.Mode,
+	protocolVersion string,
+	profileRevision uint64,
+	peerConfig *mgmProto.RemotePeerConfig,
+	now time.Time,
+) (peerTunnelState, bool, error) {
+	transitionID := peerConfig.GetTunnelTransitionId()
+	effectiveAt := peerConfig.GetTunnelEffectiveAt()
+	if transitionID == "" && effectiveAt == nil {
+		if mode == tunnel.ModeAmneziaWG {
+			return peerTunnelState{}, false, errors.New(
+				"AmneziaWG transition metadata is missing",
+			)
+		}
+		return peerTunnelState{mode: mode}, false, nil
+	}
+	if transitionID == "" {
+		return peerTunnelState{}, false, errors.New("tunnel transition ID is missing")
+	}
+	if effectiveAt == nil {
+		return peerTunnelState{}, false, errors.New("tunnel effective time is missing")
+	}
+	if err := effectiveAt.CheckValid(); err != nil {
+		return peerTunnelState{}, false, fmt.Errorf("invalid tunnel effective time: %w", err)
+	}
+
+	effectiveTime := effectiveAt.AsTime()
+	state := peerTunnelState{
+		mode:            mode,
+		protocolVersion: protocolVersion,
+		profileRevision: profileRevision,
+		transitionID:    transitionID,
+		effectiveAt:     effectiveTime.UnixNano(),
+	}
+	return state, effectiveTime.After(now), nil
+}
+
+func (e *Engine) syncPeerTunnelTransitions(
+	peers []*mgmProto.RemotePeerConfig,
+) error {
+	scheduled := make(map[string]struct{}, len(peers))
+	now := time.Now()
+	for _, peerConfig := range peers {
+		target, future, err := e.targetPeerTunnelState(peerConfig, now)
+		if err != nil {
+			return fmt.Errorf(
+				"validate peer %s tunnel transition: %w",
+				peerConfig.GetWgPubKey(),
+				err,
+			)
+		}
+		if !future {
+			e.cancelPeerTunnelTransition(peerConfig.GetWgPubKey())
+			continue
+		}
+		scheduled[peerConfig.GetWgPubKey()] = struct{}{}
+		e.schedulePeerTunnelTransition(peerConfig, target)
+	}
+
+	for peerKey := range e.pendingTunnelTransitions {
+		if _, ok := scheduled[peerKey]; !ok {
+			e.cancelPeerTunnelTransition(peerKey)
+		}
+	}
+	return nil
+}
+
+func (e *Engine) schedulePeerTunnelTransition(
+	peerConfig *mgmProto.RemotePeerConfig,
+	target peerTunnelState,
+) {
+	peerKey := peerConfig.GetWgPubKey()
+	if pending, ok := e.pendingTunnelTransitions[peerKey]; ok {
+		if pending.transitionID == target.transitionID &&
+			pending.profileRevision == target.profileRevision &&
+			pending.effectiveAt == target.effectiveAt {
+			return
+		}
+		pending.cancel()
+	}
+
+	ctx, cancel := context.WithCancel(e.ctx)
+	e.pendingTunnelTransitions[peerKey] = pendingTunnelTransition{
+		transitionID:    target.transitionID,
+		profileRevision: target.profileRevision,
+		effectiveAt:     target.effectiveAt,
+		cancel:          cancel,
+	}
+	config := pbproto.Clone(peerConfig).(*mgmProto.RemotePeerConfig)
+	wait := time.Until(time.Unix(0, target.effectiveAt))
+
+	e.shutdownWg.Add(1)
+	go func() {
+		defer e.shutdownWg.Done()
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+
+		e.syncMsgMux.Lock()
+		defer e.syncMsgMux.Unlock()
+
+		pending, ok := e.pendingTunnelTransitions[peerKey]
+		if !ok ||
+			pending.transitionID != target.transitionID ||
+			pending.profileRevision != target.profileRevision ||
+			pending.effectiveAt != target.effectiveAt {
+			return
+		}
+		delete(e.pendingTunnelTransitions, peerKey)
+
+		if err := e.removePeer(peerKey); err != nil {
+			e.failTunnelTransition(peerKey, target.transitionID, err)
+			return
+		}
+		if err := e.addNewPeer(config); err != nil {
+			e.failTunnelTransition(peerKey, target.transitionID, err)
+		}
+	}()
+}
+
+func (e *Engine) cancelPeerTunnelTransition(peerKey string) {
+	pending, ok := e.pendingTunnelTransitions[peerKey]
+	if !ok {
+		return
+	}
+	pending.cancel()
+	delete(e.pendingTunnelTransitions, peerKey)
+}
+
+func (e *Engine) failTunnelTransition(peerKey, transitionID string, err error) {
+	log.Errorf(
+		"tunnel transition %s for peer %s could not be applied: %v",
+		transitionID,
+		peerKey,
+		err,
+	)
+	_ = CtxGetState(e.ctx).Wrap(ErrResetConnection)
+	e.clientCancel()
+}
+
+func (e *Engine) configurePeerTunnelState(
+	peerKey string,
+	state peerTunnelState,
+) error {
+	if e.config.TunnelProfile == nil && state.mode == tunnel.ModeStandard {
+		return nil
+	}
+	configurer, ok := e.wgInterface.(hybridTunnelConfigurer)
+	if !ok {
+		return iface.ErrTunnelConfigUnsupported
+	}
+	if err := configurer.SetPeerTunnelMode(
+		peerKey,
+		state.mode,
+		state.profileRevision,
+	); err != nil {
+		return fmt.Errorf("configure peer tunnel mode: %w", err)
+	}
 	return nil
 }
 
@@ -2102,13 +2454,14 @@ func (e *Engine) newWgIface() (*iface.WGIface, error) {
 	}
 
 	opts := iface.WGIFaceOpts{
-		IFaceName:    e.config.WgIfaceName,
-		Address:      e.config.WgAddr,
-		WGPort:       e.config.WgPort,
-		WGPrivKey:    e.config.WgPrivateKey.String(),
-		MTU:          e.config.MTU,
-		TransportNet: transportNet,
-		DisableDNS:   e.config.DisableDNS,
+		IFaceName:      e.config.WgIfaceName,
+		Address:        e.config.WgAddr,
+		WGPort:         e.config.WgPort,
+		WGPrivKey:      e.config.WgPrivateKey.String(),
+		MTU:            e.config.MTU,
+		TransportNet:   transportNet,
+		DisableDNS:     e.config.DisableDNS,
+		ForceUserspace: e.config.TunnelProfile != nil,
 	}
 
 	switch runtime.GOOS {

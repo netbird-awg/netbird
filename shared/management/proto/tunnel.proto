@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "/proto";
+
+package management;
+
+// TunnelMode is selected by Management for a pair of peers. The zero value
+// remains standard WireGuard for compatibility with older clients.
+enum TunnelMode {
+  TunnelModeStandard = 0;
+  TunnelModeAmneziaWG = 1;
+  TunnelModeBlocked = 2;
+}
+
+// TunnelRuntimeMeta reports whether the client loaded its assigned tunnel
+// profile. Capability alone must not be treated as readiness.
+message TunnelRuntimeMeta {
+  string protocol_version = 1;
+  uint64 profile_revision = 2;
+  string adapter_revision = 3;
+  bool ready = 4;
+  string error_code = 5;
+  int64 estimated_clock_skew_ms = 6;
+}
+
+// TunnelProfile contains the account profile assigned to the local peer.
+// The complete Login/Sync response is already peer-key encrypted.
+message TunnelProfile {
+  string protocol_version = 1;
+  uint64 revision = 2;
+  bytes parameters = 3;
+  google.protobuf.Timestamp server_time = 4;
+}
+
+// PeerTunnelConfigCompact carries a server-computed, receiver-specific tunnel
+// decision for a peer in a component NetworkMap.
+message PeerTunnelConfigCompact {
+  uint32 peer_index = 1;
+  TunnelMode tunnel_mode = 2;
+  string protocol_version = 3;
+  uint64 profile_revision = 4;
+  string transition_id = 5;
+  google.protobuf.Timestamp effective_at = 6;
+}

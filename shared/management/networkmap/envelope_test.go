@@ -8,9 +8,11 @@ import (
 	"net"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	goproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	mgmtgrpc "github.com/netbirdio/netbird/management/internals/shared/grpc"
 	"github.com/netbirdio/netbird/management/server/types"
@@ -44,6 +46,45 @@ func TestEnvelopeToNetworkMap_RoundTrip(t *testing.T) {
 	require.NotNil(t, result.Components.AccountSettings)
 	require.NotEmpty(t, result.NetworkMap.RemotePeers, "two-peer allow policy should produce one remote peer")
 	require.NotEmpty(t, result.NetworkMap.FirewallRules, "two-peer allow policy should produce firewall rules")
+}
+
+func TestEnvelopeToNetworkMap_AppliesPeerTunnelConfig(t *testing.T) {
+	components, localPeerKey := buildSmokeComponents(t)
+	envelope := mgmtgrpc.EncodeNetworkMapEnvelope(mgmtgrpc.ComponentsEnvelopeInput{
+		Components: components,
+		DNSDomain:  "netbird.cloud",
+	})
+
+	var remoteIndex uint32
+	for index, peer := range envelope.GetFull().GetPeers() {
+		key := base64.StdEncoding.EncodeToString(peer.GetWgPubKey())
+		if key != localPeerKey {
+			remoteIndex = uint32(index)
+			break
+		}
+	}
+	effectiveAt := timestamppb.New(time.Now().Add(-time.Second))
+	envelope.GetFull().PeerTunnelConfigs = []*proto.PeerTunnelConfigCompact{{
+		PeerIndex:       remoteIndex,
+		TunnelMode:      proto.TunnelMode_TunnelModeAmneziaWG,
+		ProtocolVersion: "awg2",
+		ProfileRevision: 4,
+		TransitionId:    "transition-1",
+		EffectiveAt:     effectiveAt,
+	}}
+
+	result, err := nbnetworkmap.EnvelopeToNetworkMap(
+		context.Background(),
+		envelope,
+		localPeerKey,
+		"netbird.cloud",
+	)
+	require.NoError(t, err)
+	require.Len(t, result.NetworkMap.RemotePeers, 1)
+	remote := result.NetworkMap.RemotePeers[0]
+	require.Equal(t, proto.TunnelMode_TunnelModeAmneziaWG, remote.GetTunnelMode())
+	require.Equal(t, uint64(4), remote.GetTunnelProfileRevision())
+	require.Equal(t, "transition-1", remote.GetTunnelTransitionId())
 }
 
 // TestCalculate_FirewallRuleProtocol_NeverNetbirdSSH guards against the

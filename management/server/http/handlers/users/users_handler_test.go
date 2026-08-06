@@ -279,6 +279,7 @@ func TestUpdateUser(t *testing.T) {
 		expectedBlocked       bool
 		expectedIsServiceUser bool
 		expectedGroups        []string
+		expectedTunnelPolicy  *api.UserTunnelPolicy
 	}{
 		{
 			name:               "Update_Block_User",
@@ -290,7 +291,10 @@ func TestUpdateUser(t *testing.T) {
 			expectedRole:       "user",
 			expectedStatus:     "blocked",
 			expectedGroups:     []string{"group_1"},
-			requestBody:        bytes.NewBufferString("{\"role\":\"user\",\"auto_groups\":[\"group_1\"],\"is_service_user\":false, \"is_blocked\": true}"),
+			expectedTunnelPolicy: tunnelPolicyRef(
+				api.UserTunnelPolicyInherit,
+			),
+			requestBody: bytes.NewBufferString("{\"role\":\"user\",\"auto_groups\":[\"group_1\"],\"is_service_user\":false, \"is_blocked\": true}"),
 		},
 		{
 			name:               "Update_Change_Role_To_Admin",
@@ -302,7 +306,10 @@ func TestUpdateUser(t *testing.T) {
 			expectedRole:       "admin",
 			expectedStatus:     "blocked",
 			expectedGroups:     []string{"group_1"},
-			requestBody:        bytes.NewBufferString("{\"role\":\"admin\",\"auto_groups\":[\"group_1\"],\"is_service_user\":false, \"is_blocked\": false}"),
+			expectedTunnelPolicy: tunnelPolicyRef(
+				api.UserTunnelPolicyInherit,
+			),
+			requestBody: bytes.NewBufferString("{\"role\":\"admin\",\"auto_groups\":[\"group_1\"],\"is_service_user\":false, \"is_blocked\": false}"),
 		},
 		{
 			name:               "Update_Groups",
@@ -314,7 +321,23 @@ func TestUpdateUser(t *testing.T) {
 			expectedRole:       "admin",
 			expectedStatus:     "blocked",
 			expectedGroups:     []string{"group_2", "group_3"},
-			requestBody:        bytes.NewBufferString("{\"role\":\"admin\",\"auto_groups\":[\"group_3\", \"group_2\"],\"is_service_user\":false, \"is_blocked\": false}"),
+			expectedTunnelPolicy: tunnelPolicyRef(
+				api.UserTunnelPolicyInherit,
+			),
+			requestBody: bytes.NewBufferString("{\"role\":\"admin\",\"auto_groups\":[\"group_3\", \"group_2\"],\"is_service_user\":false, \"is_blocked\": false}"),
+		},
+		{
+			name:                 "Update_Tunnel_Policy",
+			requestType:          http.MethodPut,
+			requestPath:          "/api/users/" + regularUserID,
+			expectedStatusCode:   http.StatusOK,
+			expectedUserID:       regularUserID,
+			expectedBlocked:      false,
+			expectedRole:         "user",
+			expectedStatus:       "blocked",
+			expectedGroups:       []string{"group_1"},
+			expectedTunnelPolicy: tunnelPolicyRef(api.UserTunnelPolicyPreferAwg),
+			requestBody:          bytes.NewBufferString("{\"role\":\"user\",\"auto_groups\":[\"group_1\"],\"is_service_user\":false,\"is_blocked\":false,\"tunnel_policy\":\"prefer_awg\"}"),
 		},
 		{
 			name:               "Should_Fail_Because_AutoGroups_Is_Absent",
@@ -371,6 +394,7 @@ func TestUpdateUser(t *testing.T) {
 				assert.Equal(t, tc.expectedRole, respBody.Role)
 				assert.Equal(t, tc.expectedIsServiceUser, *respBody.IsServiceUser)
 				assert.Equal(t, tc.expectedBlocked, respBody.IsBlocked)
+				assert.Equal(t, tc.expectedTunnelPolicy, respBody.TunnelPolicy)
 				assert.Len(t, respBody.AutoGroups, len(tc.expectedGroups))
 
 				for _, expectedGroup := range tc.expectedGroups {
@@ -385,6 +409,10 @@ func TestUpdateUser(t *testing.T) {
 			}
 		})
 	}
+}
+
+func tunnelPolicyRef(policy api.UserTunnelPolicy) *api.UserTunnelPolicy {
+	return &policy
 }
 
 func TestCreateUser(t *testing.T) {

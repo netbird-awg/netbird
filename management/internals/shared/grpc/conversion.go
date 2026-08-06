@@ -20,6 +20,7 @@ import (
 	nbconfig "github.com/netbirdio/netbird/management/internals/server/config"
 	nbpeer "github.com/netbirdio/netbird/management/server/peer"
 	"github.com/netbirdio/netbird/management/server/posture"
+	managementtunnel "github.com/netbirdio/netbird/management/server/tunnel"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/shared/management/networkmap"
 	"github.com/netbirdio/netbird/shared/management/proto"
@@ -171,6 +172,12 @@ func ToSyncResponse(ctx context.Context, config *nbconfig.Config, httpConfig *nb
 		},
 		Checks: toProtocolChecks(ctx, checks),
 	}
+	now := time.Now().UTC()
+	response.PeerConfig.TunnelProfile = managementtunnel.ProfileForPeer(
+		peer.ToComponent(),
+		settings,
+		now,
+	)
 
 	nbConfig := toNetbirdConfig(config, turnCredentials, relayCredentials, extraSettings, settings)
 	extendedConfig := integrationsConfig.ExtendNetBirdConfig(peer.ID, peerGroups, nbConfig, extraSettings)
@@ -181,15 +188,41 @@ func ToSyncResponse(ctx context.Context, config *nbconfig.Config, httpConfig *nb
 	remotePeers := make([]*proto.RemotePeerConfig, 0, len(networkMap.Peers)+len(networkMap.OfflinePeers))
 	remotePeers = networkmap.AppendRemotePeerConfig(remotePeers, networkMap.Peers, dnsName, includeIPv6)
 
+	response.NetworkMap.OfflinePeers = networkmap.AppendRemotePeerConfig(nil, networkMap.OfflinePeers, dnsName, includeIPv6)
+	allPeers := make(
+		[]*types.ComponentPeer,
+		0,
+		len(networkMap.Peers)+len(networkMap.OfflinePeers),
+	)
+	allPeers = append(allPeers, networkMap.Peers...)
+	allPeers = append(allPeers, networkMap.OfflinePeers...)
+	tunnelConfigs := planTunnelConfigs(
+		peer.ToComponent(),
+		allPeers,
+		settings,
+		networkMap.UserTunnelPolicies,
+		now,
+	)
+	applyTunnelConfigs(remotePeers, networkMap.Peers, tunnelConfigs)
+	applyTunnelConfigs(
+		response.NetworkMap.OfflinePeers,
+		networkMap.OfflinePeers,
+		tunnelConfigs,
+	)
+	remotePeers = filterBlockedRemoteConfigs(remotePeers)
+	response.NetworkMap.OfflinePeers = filterBlockedRemoteConfigs(
+		response.NetworkMap.OfflinePeers,
+	)
 	if !shouldSkipSendingDeprecatedRemotePeers(peer.Meta.WtVersion) {
 		response.RemotePeers = remotePeers
 	}
-
 	response.NetworkMap.RemotePeers = remotePeers
 	response.RemotePeersIsEmpty = len(remotePeers) == 0
 	response.NetworkMap.RemotePeersIsEmpty = response.RemotePeersIsEmpty
-
-	response.NetworkMap.OfflinePeers = networkmap.AppendRemotePeerConfig(nil, networkMap.OfflinePeers, dnsName, includeIPv6)
+	response.NetworkMap.Routes = networkmap.ToProtocolRoutes(filterBlockedRoutes(
+		networkMap.Routes,
+		blockedPeerIDs(tunnelConfigs),
+	))
 
 	firewallRules := networkmap.ToProtocolFirewallRules(networkMap.FirewallRules, includeIPv6, useSourcePrefixes)
 	response.NetworkMap.FirewallRules = firewallRules

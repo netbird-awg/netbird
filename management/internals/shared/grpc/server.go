@@ -688,7 +688,42 @@ func extractPeerMeta(ctx context.Context, meta *proto.PeerSystemMeta) nbpeer.Pee
 		Files:              files,
 		Capabilities:       capabilitiesToInt32(meta.GetCapabilities()),
 		SyncMessageVersion: int(meta.GetSyncMessageVersion()),
+		TunnelRuntime:      extractTunnelRuntime(meta.GetTunnelRuntime()),
 	}
+}
+
+func extractTunnelRuntime(meta *proto.TunnelRuntimeMeta) nbpeer.TunnelRuntimeMeta {
+	if meta == nil {
+		return nbpeer.TunnelRuntimeMeta{}
+	}
+	runtime := nbpeer.TunnelRuntimeMeta{
+		ProtocolVersion:      meta.GetProtocolVersion(),
+		ProfileRevision:      meta.GetProfileRevision(),
+		AdapterRevision:      meta.GetAdapterRevision(),
+		Ready:                meta.GetReady(),
+		ErrorCode:            meta.GetErrorCode(),
+		EstimatedClockSkewMS: meta.GetEstimatedClockSkewMs(),
+	}
+	if len(runtime.ProtocolVersion) > 32 ||
+		len(runtime.AdapterRevision) > 128 ||
+		len(runtime.ErrorCode) > 64 {
+		return nbpeer.TunnelRuntimeMeta{
+			ErrorCode: "invalid_runtime_metadata",
+		}
+	}
+	if runtime.Ready &&
+		(runtime.ProtocolVersion == "" ||
+			runtime.ProfileRevision == 0 ||
+			runtime.AdapterRevision == "") {
+		runtime.Ready = false
+		runtime.ErrorCode = "incomplete_runtime_metadata"
+	}
+	if runtime.EstimatedClockSkewMS < -2000 ||
+		runtime.EstimatedClockSkewMS > 2000 {
+		runtime.Ready = false
+		runtime.ErrorCode = "clock_skew"
+	}
+	return runtime
 }
 
 func capabilitiesToInt32(caps []proto.PeerCapability) []int32 {

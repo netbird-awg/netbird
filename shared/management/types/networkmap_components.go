@@ -37,6 +37,7 @@ type NetworkMapComponents struct {
 
 	GroupIDToUserIDs   map[string][]string
 	AllowedUserIDs     map[string]struct{}
+	UserTunnelPolicies map[string]TunnelUserPolicyInfo
 	PostureFailedPeers map[string]map[string]struct{}
 
 	RouterPeers map[string]*ComponentPeer
@@ -194,6 +195,7 @@ func (c *NetworkMapComponents) Calculate(ctx context.Context) *NetworkMap {
 		FirewallRules:       firewallRules,
 		RoutesFirewallRules: append(networkResourcesFirewallRules, routesFirewallRules...),
 		AuthorizedUsers:     authorizedUsers,
+		UserTunnelPolicies:  maps.Clone(c.UserTunnelPolicies),
 		EnableSSH:           sshEnabled,
 
 		ForceRoutingPeerDNSResolution: c.ForceRoutingPeerDNSResolution,

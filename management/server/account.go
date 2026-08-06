@@ -47,6 +47,7 @@ import (
 	"github.com/netbirdio/netbird/management/server/settings"
 	"github.com/netbirdio/netbird/management/server/store"
 	"github.com/netbirdio/netbird/management/server/telemetry"
+	managementtunnel "github.com/netbirdio/netbird/management/server/tunnel"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/management/server/util"
 	"github.com/netbirdio/netbird/route"
@@ -310,6 +311,18 @@ func (am *DefaultAccountManager) UpdateAccountSettings(ctx context.Context, acco
 			return err
 		}
 
+		tunnelSettingsChanged, err := managementtunnel.PrepareSettingsUpdate(
+			newSettings,
+			oldSettings,
+			time.Now().UTC(),
+		)
+		if err != nil {
+			return status.Errorf(status.InvalidArgument, "%s", err)
+		}
+		if tunnelSettingsChanged {
+			updateAccountPeers = true
+		}
+
 		if err = am.validateSettingsUpdate(ctx, transaction, newSettings, oldSettings, userID, accountID); err != nil {
 			return err
 		}
@@ -447,6 +460,22 @@ func (am *DefaultAccountManager) UpdateAccountSettings(ctx context.Context, acco
 		}
 		am.StoreEvent(ctx, userID, accountID, accountID, activity.AccountNetworkRangeUpdated, eventMeta)
 	}
+	if normalizedTunnelAccountPolicy(oldSettings.TunnelPolicy) !=
+		normalizedTunnelAccountPolicy(newSettings.TunnelPolicy) ||
+		!tunnelProfilesEqual(oldSettings.TunnelProfile, newSettings.TunnelProfile) {
+		am.StoreEvent(
+			ctx,
+			userID,
+			accountID,
+			accountID,
+			activity.AccountTunnelPolicyUpdated,
+			map[string]any{
+				"old_policy": oldSettings.TunnelPolicy,
+				"new_policy": newSettings.TunnelPolicy,
+				"revision":   tunnelProfileRevision(newSettings.TunnelProfile),
+			},
+		)
+	}
 	if reloadReverseProxy {
 		if err = am.serviceManager.ReloadAllServicesForAccount(ctx, accountID); err != nil {
 			log.WithContext(ctx).Warnf("failed to reload all services for account %s: %v", accountID, err)
@@ -458,6 +487,31 @@ func (am *DefaultAccountManager) UpdateAccountSettings(ctx context.Context, acco
 	}
 
 	return newSettings, nil
+}
+
+func tunnelProfilesEqual(left, right *types.TunnelProfile) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.ProtocolVersion == right.ProtocolVersion &&
+		left.Revision == right.Revision &&
+		string(left.Parameters) == string(right.Parameters)
+}
+
+func normalizedTunnelAccountPolicy(
+	policy types.TunnelAccountPolicy,
+) types.TunnelAccountPolicy {
+	if policy == "" {
+		return types.TunnelAccountPolicyStandard
+	}
+	return policy
+}
+
+func tunnelProfileRevision(profile *types.TunnelProfile) uint64 {
+	if profile == nil {
+		return 0
+	}
+	return profile.Revision
 }
 
 func ipv6SettingsChanged(old, updated *types.Settings) bool {
@@ -2062,6 +2116,7 @@ func newAccountWithId(ctx context.Context, accountID, userID, domain, email, nam
 				UserApprovalRequired: true,
 			},
 			LazyConnectionEnabled: true,
+			TunnelPolicy:          types.TunnelAccountPolicyStandard,
 		},
 		Onboarding: types.AccountOnboarding{
 			OnboardingFlowPending: true,
@@ -2176,6 +2231,7 @@ func (am *DefaultAccountManager) GetOrCreateAccountByPrivateDomain(ctx context.C
 				Extra: &types.ExtraSettings{
 					UserApprovalRequired: true,
 				},
+				TunnelPolicy: types.TunnelAccountPolicyStandard,
 			},
 		}
 

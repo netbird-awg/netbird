@@ -96,6 +96,13 @@ type Settings struct {
 	// LocalMfaEnabled indicates if TOTP MFA is enabled for local users.
 	// Only applicable when the embedded IDP is enabled.
 	LocalMfaEnabled bool
+
+	// TunnelPolicy controls account-wide tunnel obfuscation.
+	TunnelPolicy TunnelAccountPolicy `gorm:"default:'standard'"`
+	// TunnelPolicyUpdatedAt anchors deterministic pair transition times.
+	TunnelPolicyUpdatedAt time.Time
+	// TunnelProfile is the active Hybrid AWG profile.
+	TunnelProfile *TunnelProfile `gorm:"serializer:json"`
 }
 
 // Copy copies the Settings struct
@@ -127,6 +134,16 @@ func (s *Settings) Copy() *Settings {
 		EmbeddedIdpEnabled:              s.EmbeddedIdpEnabled,
 		LocalAuthDisabled:               s.LocalAuthDisabled,
 		LocalMfaEnabled:                 s.LocalMfaEnabled,
+		TunnelPolicy:                    s.TunnelPolicy,
+		TunnelPolicyUpdatedAt:           s.TunnelPolicyUpdatedAt,
+	}
+	if s.TunnelProfile != nil {
+		settings.TunnelProfile = &TunnelProfile{
+			ProtocolVersion: s.TunnelProfile.ProtocolVersion,
+			Revision:        s.TunnelProfile.Revision,
+			Parameters:      slices.Clone(s.TunnelProfile.Parameters),
+			UpdatedAt:       s.TunnelProfile.UpdatedAt,
+		}
 	}
 	if s.Extra != nil {
 		settings.Extra = s.Extra.Copy()

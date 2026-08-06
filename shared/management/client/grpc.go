@@ -975,7 +975,7 @@ func infoToMetaData(info *system.Info) *proto.PeerSystemMeta {
 		})
 	}
 
-	return &proto.PeerSystemMeta{
+	meta := &proto.PeerSystemMeta{
 		Hostname:         info.Hostname,
 		GoOS:             info.GoOS,
 		OS:               info.OS,
@@ -1014,6 +1014,17 @@ func infoToMetaData(info *system.Info) *proto.PeerSystemMeta {
 
 		SyncMessageVersion: syncMessageVersion(*info),
 	}
+	if runtime := info.TunnelRuntime; runtime != nil {
+		meta.TunnelRuntime = &proto.TunnelRuntimeMeta{
+			ProtocolVersion:      runtime.ProtocolVersion,
+			ProfileRevision:      runtime.ProfileRevision,
+			AdapterRevision:      runtime.AdapterRevision,
+			Ready:                runtime.Ready,
+			ErrorCode:            runtime.ErrorCode,
+			EstimatedClockSkewMs: runtime.EstimatedClockSkewMS,
+		}
+	}
+	return meta
 }
 
 // peerCapabilities returns the capabilities this client supports.
@@ -1024,6 +1035,7 @@ func peerCapabilities(info system.Info) []proto.PeerCapability {
 	if !info.DisableIPv6 {
 		caps = append(caps, proto.PeerCapability_PeerCapabilityIPv6Overlay)
 	}
+	caps = append(caps, hybridAWGCapabilities()...)
 	return caps
 }
 

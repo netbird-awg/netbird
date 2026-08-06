@@ -68,6 +68,7 @@ type UserInfo struct {
 	PendingApproval      bool                                       `json:"pending_approval"`
 	Password             string                                     `json:"password"`
 	IntegrationReference integration_reference.IntegrationReference `json:"-"`
+	TunnelPolicy         TunnelUserPolicy                           `json:"tunnel_policy"`
 	// IdPID is the identity provider ID (connector ID) extracted from the Dex-encoded user ID.
 	// This field is only populated when the user ID can be decoded from Dex's format.
 	IdPID string `json:"idp_id,omitempty"`
@@ -104,6 +105,9 @@ type User struct {
 
 	Name  string `gorm:"default:''"`
 	Email string `gorm:"default:''"`
+
+	TunnelPolicy          TunnelUserPolicy `gorm:"default:'inherit'"`
+	TunnelPolicyUpdatedAt time.Time
 }
 
 // IsBlocked returns true if the user is blocked, false otherwise
@@ -169,6 +173,7 @@ func (u *User) ToUserInfo(userData *idp.UserData) (*UserInfo, error) {
 			LastLogin:       u.GetLastLogin(),
 			Issued:          u.Issued,
 			PendingApproval: u.PendingApproval,
+			TunnelPolicy:    u.TunnelPolicy,
 		}, nil
 	}
 	if userData.ID != u.Id {
@@ -193,6 +198,7 @@ func (u *User) ToUserInfo(userData *idp.UserData) (*UserInfo, error) {
 		Issued:          u.Issued,
 		PendingApproval: u.PendingApproval,
 		Password:        userData.Password,
+		TunnelPolicy:    u.TunnelPolicy,
 	}, nil
 }
 
@@ -205,22 +211,24 @@ func (u *User) Copy() *User {
 		pats[k] = v.Copy()
 	}
 	return &User{
-		Id:                   u.Id,
-		AccountID:            u.AccountID,
-		Role:                 u.Role,
-		AutoGroups:           autoGroups,
-		IsServiceUser:        u.IsServiceUser,
-		NonDeletable:         u.NonDeletable,
-		ServiceUserName:      u.ServiceUserName,
-		PATs:                 pats,
-		Blocked:              u.Blocked,
-		PendingApproval:      u.PendingApproval,
-		LastLogin:            u.LastLogin,
-		CreatedAt:            u.CreatedAt,
-		Issued:               u.Issued,
-		IntegrationReference: u.IntegrationReference,
-		Email:                u.Email,
-		Name:                 u.Name,
+		Id:                    u.Id,
+		AccountID:             u.AccountID,
+		Role:                  u.Role,
+		AutoGroups:            autoGroups,
+		IsServiceUser:         u.IsServiceUser,
+		NonDeletable:          u.NonDeletable,
+		ServiceUserName:       u.ServiceUserName,
+		PATs:                  pats,
+		Blocked:               u.Blocked,
+		PendingApproval:       u.PendingApproval,
+		LastLogin:             u.LastLogin,
+		CreatedAt:             u.CreatedAt,
+		Issued:                u.Issued,
+		IntegrationReference:  u.IntegrationReference,
+		Email:                 u.Email,
+		Name:                  u.Name,
+		TunnelPolicy:          u.TunnelPolicy,
+		TunnelPolicyUpdatedAt: u.TunnelPolicyUpdatedAt,
 	}
 }
 
@@ -237,6 +245,7 @@ func NewUser(id string, role UserRole, isServiceUser bool, nonDeletable bool, se
 		CreatedAt:       time.Now().UTC(),
 		Name:            name,
 		Email:           email,
+		TunnelPolicy:    TunnelUserPolicyInherit,
 	}
 }
 

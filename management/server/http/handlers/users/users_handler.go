@@ -89,6 +89,22 @@ func (h *handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tunnelPolicy := existingUser.TunnelPolicy
+	if tunnelPolicy == "" {
+		tunnelPolicy = types.TunnelUserPolicyInherit
+	}
+	if req.TunnelPolicy != nil {
+		if !req.TunnelPolicy.Valid() {
+			util.WriteError(
+				r.Context(),
+				status.Errorf(status.InvalidArgument, "invalid tunnel policy"),
+				w,
+			)
+			return
+		}
+		tunnelPolicy = types.TunnelUserPolicy(*req.TunnelPolicy)
+	}
+
 	newUser, err := h.accountManager.SaveUser(r.Context(), accountID, userID, &types.User{
 		Id:                   targetUserID,
 		Role:                 userRole,
@@ -96,6 +112,7 @@ func (h *handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		Blocked:              req.IsBlocked,
 		Issued:               existingUser.Issued,
 		IntegrationReference: existingUser.IntegrationReference,
+		TunnelPolicy:         tunnelPolicy,
 	})
 
 	if err != nil {
@@ -352,7 +369,18 @@ func toUserResponse(user *types.UserInfo, currenUserID string) *api.User {
 		PendingApproval: user.PendingApproval,
 		Password:        password,
 		IdpId:           idpID,
+		TunnelPolicy:    toAPIUserTunnelPolicy(user.TunnelPolicy),
 	}
+}
+
+func toAPIUserTunnelPolicy(
+	policy types.TunnelUserPolicy,
+) *api.UserTunnelPolicy {
+	if policy == "" {
+		return nil
+	}
+	result := api.UserTunnelPolicy(policy)
+	return &result
 }
 
 // approveUser is a POST request to approve a user that is pending approval

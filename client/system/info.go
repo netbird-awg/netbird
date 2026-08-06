@@ -42,6 +42,16 @@ type File struct {
 	ProcessIsRunning bool
 }
 
+// TunnelRuntimeInfo reports the tunnel profile loaded by the local adapter.
+type TunnelRuntimeInfo struct {
+	ProtocolVersion      string
+	ProfileRevision      uint64
+	AdapterRevision      string
+	Ready                bool
+	ErrorCode            string
+	EstimatedClockSkewMS int64
+}
+
 // Info is an object that contains machine information
 // Most of the code is taken from https://github.com/matishsiao/goInfo
 type Info struct {
@@ -81,6 +91,7 @@ type Info struct {
 	DisableSSHAuth                bool
 
 	SyncMessageVersion *int
+	TunnelRuntime      *TunnelRuntimeInfo
 }
 
 func (i *Info) SetFlags(

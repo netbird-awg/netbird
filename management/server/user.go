@@ -725,6 +725,19 @@ func (am *DefaultAccountManager) prepareUserUpdateEvents(ctx context.Context, ac
 			am.StoreEvent(ctx, initiatorUserID, oldUser.Id, accountID, activity.UserRoleUpdated, map[string]any{"role": newUser.Role})
 		})
 	}
+	if normalizedUserTunnelPolicy(oldUser.TunnelPolicy, "", false) !=
+		normalizedUserTunnelPolicy(newUser.TunnelPolicy, "", false) {
+		eventsToStore = append(eventsToStore, func() {
+			am.StoreEvent(
+				ctx,
+				initiatorUserID,
+				oldUser.Id,
+				accountID,
+				activity.UserTunnelPolicyUpdated,
+				map[string]any{"policy": newUser.TunnelPolicy},
+			)
+		})
+	}
 
 	addedGroups, err := tx.GetGroupsByIDs(ctx, store.LockingStrengthNone, accountID, addedGroupIDs)
 	if err != nil {
@@ -779,6 +792,18 @@ func (am *DefaultAccountManager) processUserUpdate(ctx context.Context, transact
 	updatedUser.Role = update.Role
 	updatedUser.Blocked = update.Blocked
 	updatedUser.AutoGroups = update.AutoGroups
+	updatedUser.TunnelPolicy = normalizedUserTunnelPolicy(
+		update.TunnelPolicy,
+		oldUser.TunnelPolicy,
+		isNewUser,
+	)
+	if (isNewUser &&
+		updatedUser.TunnelPolicy != types.TunnelUserPolicyInherit) ||
+		(!isNewUser &&
+			normalizedUserTunnelPolicy(oldUser.TunnelPolicy, "", false) !=
+				updatedUser.TunnelPolicy) {
+		updatedUser.TunnelPolicyUpdatedAt = time.Now().UTC()
+	}
 	// these fields can't be set via API, only via direct call to the method
 	updatedUser.Issued = update.Issued
 	updatedUser.IntegrationReference = update.IntegrationReference
@@ -925,6 +950,13 @@ func validateUserUpdate(groupsMap map[string]*types.Group, initiatorUser, oldUse
 	if oldUser.IsServiceUser && update.Role == types.UserRoleOwner {
 		return status.Errorf(status.PermissionDenied, "can't update a service user with owner role")
 	}
+	if !validUserTunnelPolicy(update.TunnelPolicy) {
+		return status.Errorf(
+			status.InvalidArgument,
+			"invalid user tunnel policy %q",
+			update.TunnelPolicy,
+		)
+	}
 
 	for _, newGroupID := range update.AutoGroups {
 		group, ok := groupsMap[newGroupID]
@@ -938,6 +970,32 @@ func validateUserUpdate(groupsMap map[string]*types.Group, initiatorUser, oldUse
 	}
 
 	return nil
+}
+
+func normalizedUserTunnelPolicy(
+	requested,
+	current types.TunnelUserPolicy,
+	isNew bool,
+) types.TunnelUserPolicy {
+	if requested != "" {
+		return requested
+	}
+	if !isNew && current != "" {
+		return current
+	}
+	return types.TunnelUserPolicyInherit
+}
+
+func validUserTunnelPolicy(policy types.TunnelUserPolicy) bool {
+	switch policy {
+	case "",
+		types.TunnelUserPolicyInherit,
+		types.TunnelUserPolicyPreferAWG,
+		types.TunnelUserPolicyStandardOnly:
+		return true
+	default:
+		return false
+	}
 }
 
 // GetOrCreateAccountByUser returns an existing account for a given user id or creates a new one if doesn't exist

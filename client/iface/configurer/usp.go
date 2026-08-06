@@ -51,6 +51,7 @@ func NewUSPConfigurer(device *device.Device, deviceName string, activityRecorder
 		deviceName:       deviceName,
 		activityRecorder: activityRecorder,
 	}
+	configureAuthenticatedActivity(device, activityRecorder)
 	wgCfg.statsCache = newStatsCache(statsCacheTTL, wgCfg.fetchStats)
 	wgCfg.startUAPI()
 	return wgCfg
@@ -62,6 +63,7 @@ func NewUSPConfigurerNoUAPI(device *device.Device, deviceName string, activityRe
 		deviceName:       deviceName,
 		activityRecorder: activityRecorder,
 	}
+	configureAuthenticatedActivity(device, activityRecorder)
 	wgCfg.statsCache = newStatsCache(statsCacheTTL, wgCfg.fetchStats)
 	return wgCfg
 }

@@ -22,7 +22,7 @@ func NewWGIFace(opts WGIFaceOpts) (*WGIface, error) {
 		}, nil
 	}
 
-	if device.WireGuardModuleIsLoaded() {
+	if device.WireGuardModuleIsLoaded() && !opts.ForceUserspace {
 		return &WGIface{
 			tun:            device.NewKernelDevice(opts.IFaceName, opts.Address, opts.WGPort, opts.WGPrivKey, opts.MTU, opts.TransportNet),
 			wgProxyFactory: wgproxy.NewKernelFactory(opts.WGPort, opts.MTU),

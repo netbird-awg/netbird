@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	nbdns "github.com/netbirdio/netbird/dns"
 	"github.com/netbirdio/netbird/management/server/types"
@@ -245,6 +246,31 @@ func TestEncodeNetworkMapEnvelope_Basic(t *testing.T) {
 		byLabel[p.DnsLabel] = p
 	}
 	assert.Len(t, byLabel["peerb"].Ipv6, 16, "peer-b has ipv6 → 16 bytes")
+}
+
+func TestEncodeNetworkMapEnvelope_PeerTunnelConfig(t *testing.T) {
+	components := newTestComponents()
+	effectiveAt := timestamppb.New(time.Now().Add(time.Minute))
+
+	full := EncodeNetworkMapEnvelope(ComponentsEnvelopeInput{
+		Components: components,
+		PeerTunnelConfigs: map[string]PeerTunnelConfig{
+			"peer-b": {
+				Mode:            proto.TunnelMode_TunnelModeAmneziaWG,
+				ProtocolVersion: "awg2",
+				ProfileRevision: 8,
+				TransitionID:    "transition-1",
+				EffectiveAt:     effectiveAt,
+			},
+		},
+	}).GetFull()
+
+	require.Len(t, full.GetPeerTunnelConfigs(), 1)
+	config := full.GetPeerTunnelConfigs()[0]
+	require.Less(t, int(config.GetPeerIndex()), len(full.GetPeers()))
+	require.Equal(t, "peerb", full.GetPeers()[config.GetPeerIndex()].GetDnsLabel())
+	require.Equal(t, proto.TunnelMode_TunnelModeAmneziaWG, config.GetTunnelMode())
+	require.Equal(t, uint64(8), config.GetProfileRevision())
 }
 
 func TestEncodeNetworkMapEnvelope_RepeatEncodesEquivalent(t *testing.T) {
@@ -684,8 +710,8 @@ func TestEncodeNetworkMapEnvelope_GroupIDToUserIDs(t *testing.T) {
 }
 
 func TestToProxyPatch_EmptyInputReturnsNil(t *testing.T) {
-	assert.Nil(t, toProxyPatch(nil, "netbird.cloud", false, false))
-	assert.Nil(t, toProxyPatch(&types.NetworkMap{}, "netbird.cloud", false, false),
+	assert.Nil(t, toProxyPatch(nil, "netbird.cloud", false, false, nil))
+	assert.Nil(t, toProxyPatch(&types.NetworkMap{}, "netbird.cloud", false, false, nil),
 		"empty NetworkMap (no peers, rules, routes etc) → nil patch so proto3 omits the field")
 }
 
@@ -700,7 +726,7 @@ func TestToProxyPatch_PopulatesAllFields(t *testing.T) {
 		}},
 	}
 
-	patch := toProxyPatch(nm, "netbird.cloud", false, false)
+	patch := toProxyPatch(nm, "netbird.cloud", false, false, nil)
 
 	require.NotNil(t, patch)
 	assert.Len(t, patch.Peers, 1)

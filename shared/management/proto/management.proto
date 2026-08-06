@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "tunnel.proto";
 
 option go_package = "/proto";
 
@@ -239,6 +240,10 @@ enum PeerCapability {
   PeerCapabilityIPv6Overlay = 2;
   // Client receives NetworkMap as components and assembles it locally.
   PeerCapabilityComponentNetworkMap = 3;
+  // Client supports per-peer standard WireGuard and AmneziaWG v2.
+  PeerCapabilityHybridAmneziaWG2 = 4;
+  // Client supports per-peer standard WireGuard and AmneziaWG v3.
+  PeerCapabilityHybridAmneziaWG3 = 5;
 }
 
 // PeerSystemMeta is machine meta data like OS and version.
@@ -263,6 +268,7 @@ message PeerSystemMeta {
 
   repeated PeerCapability capabilities = 18;
   int32 syncMessageVersion = 19;
+  TunnelRuntimeMeta tunnel_runtime = 20;
 }
 
 message LoginResponse {
@@ -411,6 +417,9 @@ message PeerConfig {
 
   // IPv6 overlay address as compact bytes: 16 bytes IP + 1 byte prefix length.
   bytes address_v6 = 9;
+
+  // Tunnel profile is present only for a Hybrid AmneziaWG-capable client.
+  TunnelProfile tunnel_profile = 10;
 }
 
 message AutoUpdateSettings {
@@ -497,6 +506,12 @@ message RemotePeerConfig {
   string fqdn = 4;
 
   string agentVersion = 5;
+
+  TunnelMode tunnel_mode = 6;
+  string tunnel_protocol_version = 7;
+  uint64 tunnel_profile_revision = 8;
+  string tunnel_transition_id = 9;
+  google.protobuf.Timestamp tunnel_effective_at = 10;
 }
 
 // SSHConfig represents SSH configurations of a peer.
@@ -899,6 +914,9 @@ message NetworkMapComponentsFull {
   // Reserved for future component additions (incremental_serial, parent_seq,
   // etc.) without forcing a renumber.
   reserved 26 to 50;
+
+  // Per-receiver tunnel decisions. peer_index references peers.
+  repeated PeerTunnelConfigCompact peer_tunnel_configs = 51;
 }
 
 // ProxyPatch carries NetworkMap fragments that don't fit the component-graph

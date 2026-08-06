@@ -280,6 +280,10 @@ const (
 	AccountMetricsPushEnabled Activity = 140
 	// AccountMetricsPushDisabled indicates that a user disabled metrics push for the account
 	AccountMetricsPushDisabled Activity = 141
+	// AccountTunnelPolicyUpdated indicates an account tunnel policy update.
+	AccountTunnelPolicyUpdated Activity = 142
+	// UserTunnelPolicyUpdated indicates a user tunnel policy update.
+	UserTunnelPolicyUpdated Activity = 143
 
 	AccountDeleted Activity = 99999
 )
@@ -456,6 +460,9 @@ var activityMap = map[Activity]Code{
 
 	AccountMetricsPushEnabled:  {"Account metrics push enabled", "account.setting.metrics.push.enable"},
 	AccountMetricsPushDisabled: {"Account metrics push disabled", "account.setting.metrics.push.disable"},
+
+	AccountTunnelPolicyUpdated: {"Account tunnel policy updated", "account.setting.tunnel.policy.update"},
+	UserTunnelPolicyUpdated:    {"User tunnel policy updated", "user.tunnel.policy.update"},
 
 	DomainAdded:     {"Domain added", "domain.add"},
 	DomainDeleted:   {"Domain deleted", "domain.delete"},

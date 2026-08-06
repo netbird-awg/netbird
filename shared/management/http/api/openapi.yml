@@ -401,6 +401,13 @@ components:
           items:
             type: string
           example: ["ch8i4ug6lnn4g9hqv7m0"]
+        tunnel_policy:
+          description: Selects the account-wide tunnel compatibility policy.
+          type: string
+          enum: ["standard", "prefer_awg", "require_awg"]
+          example: prefer_awg
+        tunnel_profile:
+          $ref: '#/components/schemas/TunnelProfile'
       required:
         - peer_login_expiration_enabled
         - peer_login_expiration
@@ -409,6 +416,34 @@ components:
         - regular_users_view_blocked
         - peer_expose_enabled
         - peer_expose_groups
+    TunnelProfile:
+      description: Account-wide, immutable-revision AmneziaWG tunnel profile.
+      type: object
+      properties:
+        protocol_version:
+          description: Obfuscation protocol implemented by compatible clients.
+          type: string
+          enum: ["awg2"]
+          example: awg2
+        revision:
+          description: Monotonically increasing profile revision.
+          type: integer
+          format: uint64
+          minimum: 1
+          example: 1
+        parameters:
+          description: Bounded protocol parameters validated by Management.
+          type: object
+          additionalProperties: true
+        updated_at:
+          description: Server-assigned profile update time.
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+        - protocol_version
+        - revision
+        - parameters
     AccountDashboardFeatures:
       description: Per-account dashboard section visibility overrides. Omitted keys follow the default dashboard behavior.
       type: object
@@ -524,6 +559,11 @@ components:
           example: okta-abc123
         permissions:
           $ref: '#/components/schemas/UserPermissions'
+        tunnel_policy:
+          description: User-level override for automatic tunnel selection.
+          type: string
+          enum: ["inherit", "prefer_awg", "standard_only"]
+          example: inherit
       required:
         - id
         - email
@@ -572,6 +612,11 @@ components:
           description: If set to true then user is blocked and can't use the system
           type: boolean
           example: false
+        tunnel_policy:
+          description: User-level override for automatic tunnel selection.
+          type: string
+          enum: ["inherit", "prefer_awg", "standard_only"]
+          example: inherit
       required:
         - role
         - auto_groups

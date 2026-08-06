@@ -21,9 +21,10 @@ type PeerRecord struct {
 }
 
 type ActivityRecorder struct {
-	mu         sync.RWMutex
-	peers      map[string]*PeerRecord         // publicKey to PeerRecord map
-	addrToPeer map[netip.AddrPort]*PeerRecord // address to PeerRecord map
+	mu                sync.RWMutex
+	peers             map[string]*PeerRecord         // publicKey to PeerRecord map
+	addrToPeer        map[netip.AddrPort]*PeerRecord // address to PeerRecord map
+	authenticatedOnly atomic.Bool
 }
 
 func NewActivityRecorder() *ActivityRecorder {
@@ -76,8 +77,28 @@ func (r *ActivityRecorder) Remove(publicKey string) {
 	}
 }
 
+// UseAuthenticatedEvents disables activity updates based on unauthenticated
+// packet headers.
+func (r *ActivityRecorder) UseAuthenticatedEvents() {
+	r.authenticatedOnly.Store(true)
+}
+
+// RecordPeer records a replay-checked, authenticated packet for a peer.
+func (r *ActivityRecorder) RecordPeer(publicKey string) {
+	r.mu.RLock()
+	record, ok := r.peers[publicKey]
+	r.mu.RUnlock()
+	if !ok {
+		return
+	}
+	recordActivity(record)
+}
+
 // record updates LastActivity for the given address using atomic store
 func (r *ActivityRecorder) record(address netip.AddrPort) {
+	if r.authenticatedOnly.Load() {
+		return
+	}
 	r.mu.RLock()
 	record, ok := r.addrToPeer[address]
 	r.mu.RUnlock()
@@ -86,6 +107,10 @@ func (r *ActivityRecorder) record(address netip.AddrPort) {
 		return
 	}
 
+	recordActivity(record)
+}
+
+func recordActivity(record *PeerRecord) {
 	now := int64(monotime.Now())
 	last := record.LastActivity.Load()
 	if now-last < saveFrequency {

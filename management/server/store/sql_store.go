@@ -1627,6 +1627,7 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 			settings_local_mfa_enabled, settings_metrics_push_enabled, settings_agent_network_only,
 			settings_dashboard_features, settings_auto_update_version, settings_auto_update_always,
 			settings_peer_expose_enabled, settings_peer_expose_groups,
+			settings_tunnel_policy, settings_tunnel_policy_updated_at, settings_tunnel_profile,
 			-- Embedded ExtraSettings
 			settings_extra_peer_approval_enabled, settings_extra_user_approval_required,
 			settings_extra_integrated_validator, settings_extra_integrated_validator_groups
@@ -1656,6 +1657,9 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 		autoUpdateAlways                 sql.NullBool
 		peerExposeEnabled                sql.NullBool
 		peerExposeGroups                 sql.NullString
+		tunnelPolicy                     sql.NullString
+		tunnelPolicyUpdatedAt            sql.NullTime
+		tunnelProfile                    sql.NullString
 		sExtraPeerApprovalEnabled        sql.NullBool
 		sExtraUserApprovalRequired       sql.NullBool
 		sExtraIntegratedValidator        sql.NullString
@@ -1681,6 +1685,7 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 		&sLocalMFAEnabled, &sMetricsPushEnabled, &sAgentNetworkOnly,
 		&sDashboardFeatures, &autoUpdateVersion, &autoUpdateAlways,
 		&peerExposeEnabled, &peerExposeGroups,
+		&tunnelPolicy, &tunnelPolicyUpdatedAt, &tunnelProfile,
 		&sExtraPeerApprovalEnabled, &sExtraUserApprovalRequired,
 		&sExtraIntegratedValidator, &sExtraIntegratedValidatorGroups,
 	)
@@ -1784,6 +1789,20 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 	if peerExposeGroups.Valid {
 		_ = json.Unmarshal([]byte(peerExposeGroups.String), &account.Settings.PeerExposeGroups)
 	}
+	if tunnelPolicy.Valid {
+		account.Settings.TunnelPolicy = types.TunnelAccountPolicy(tunnelPolicy.String)
+	}
+	if tunnelPolicyUpdatedAt.Valid {
+		account.Settings.TunnelPolicyUpdatedAt = tunnelPolicyUpdatedAt.Time
+	}
+	if tunnelProfile.Valid && tunnelProfile.String != "" {
+		if err := json.Unmarshal(
+			[]byte(tunnelProfile.String),
+			&account.Settings.TunnelProfile,
+		); err != nil {
+			return nil, fmt.Errorf("decode tunnel profile: %w", err)
+		}
+	}
 
 	if sExtraPeerApprovalEnabled.Valid {
 		account.Settings.Extra.PeerApprovalEnabled = sExtraPeerApprovalEnabled.Bool
@@ -1870,7 +1889,8 @@ func (s *SqlStore) getPeers(ctx context.Context, accountID string) ([]nbpeer.Pee
 	meta_kernel_version, meta_network_addresses, meta_system_serial_number, meta_system_product_name, meta_system_manufacturer,
 	meta_environment, meta_flags, meta_files, meta_capabilities, peer_status_last_seen, peer_status_session_started_at,
 	peer_status_connected, peer_status_login_expired, peer_status_requires_approval, location_connection_ip,
-	location_country_code, location_city_name, location_geo_name_id, proxy_meta_embedded, proxy_meta_cluster, ipv6, meta_sync_message_version
+	location_country_code, location_city_name, location_geo_name_id, proxy_meta_embedded, proxy_meta_cluster, ipv6,
+	meta_sync_message_version, meta_tunnel_runtime
 	FROM peers WHERE account_id = $1`
 	rows, err := s.pool.Query(ctx, query, accountID)
 	if err != nil {
@@ -1886,7 +1906,7 @@ func (s *SqlStore) getPeers(ctx context.Context, accountID string) ([]nbpeer.Pee
 			peerStatusLastSeen                                                                              sql.NullTime
 			peerStatusSessionStartedAt                                                                      sql.NullInt64
 			peerStatusConnected, peerStatusLoginExpired, peerStatusRequiresApproval, proxyEmbedded          sql.NullBool
-			ip, extraDNS, netAddr, env, flags, files, capabilities, connIP, ipv6                            []byte
+			ip, extraDNS, netAddr, env, flags, files, capabilities, connIP, ipv6, tunnelRuntime             []byte
 			metaHostname, metaGoOS, metaKernel, metaCore, metaPlatform                                      sql.NullString
 			metaOS, metaOSVersion, metaWtVersion, metaUIVersion, metaKernelVersion                          sql.NullString
 			metaSystemSerialNumber, metaSystemProductName, metaSystemManufacturer                           sql.NullString
@@ -1902,7 +1922,7 @@ func (s *SqlStore) getPeers(ctx context.Context, accountID string) ([]nbpeer.Pee
 			&metaSystemSerialNumber, &metaSystemProductName, &metaSystemManufacturer, &env, &flags, &files, &capabilities,
 			&peerStatusLastSeen, &peerStatusSessionStartedAt, &peerStatusConnected, &peerStatusLoginExpired,
 			&peerStatusRequiresApproval, &connIP, &locationCountryCode, &locationCityName, &locationGeoNameID,
-			&proxyEmbedded, &proxyCluster, &ipv6, &metaSyncMessageVersion)
+			&proxyEmbedded, &proxyCluster, &ipv6, &metaSyncMessageVersion, &tunnelRuntime)
 
 		if err == nil {
 			if lastLogin.Valid {
@@ -2025,6 +2045,14 @@ func (s *SqlStore) getPeers(ctx context.Context, accountID string) ([]nbpeer.Pee
 			if metaSyncMessageVersion.Valid {
 				p.Meta.SyncMessageVersion = int(metaSyncMessageVersion.Int32)
 			}
+			if tunnelRuntime != nil {
+				if err := json.Unmarshal(
+					tunnelRuntime,
+					&p.Meta.TunnelRuntime,
+				); err != nil {
+					return p, fmt.Errorf("decode peer tunnel runtime: %w", err)
+				}
+			}
 		}
 		return p, err
 	})
@@ -2035,7 +2063,9 @@ func (s *SqlStore) getPeers(ctx context.Context, accountID string) ([]nbpeer.Pee
 }
 
 func (s *SqlStore) getUsers(ctx context.Context, accountID string) ([]types.User, error) {
-	const query = `SELECT id, account_id, role, is_service_user, non_deletable, service_user_name, auto_groups, blocked, pending_approval, last_login, created_at, issued, integration_ref_id, integration_ref_integration_type, email, name FROM users WHERE account_id = $1`
+	const query = `SELECT id, account_id, role, is_service_user, non_deletable, service_user_name, auto_groups,
+	blocked, pending_approval, last_login, created_at, issued, integration_ref_id, integration_ref_integration_type,
+	email, name, tunnel_policy, tunnel_policy_updated_at FROM users WHERE account_id = $1`
 	rows, err := s.pool.Query(ctx, query, accountID)
 	if err != nil {
 		return nil, err
@@ -2043,9 +2073,29 @@ func (s *SqlStore) getUsers(ctx context.Context, accountID string) ([]types.User
 	users, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (types.User, error) {
 		var u types.User
 		var autoGroups []byte
-		var lastLogin, createdAt sql.NullTime
+		var lastLogin, createdAt, tunnelPolicyUpdatedAt sql.NullTime
 		var isServiceUser, nonDeletable, blocked, pendingApproval sql.NullBool
-		err := row.Scan(&u.Id, &u.AccountID, &u.Role, &isServiceUser, &nonDeletable, &u.ServiceUserName, &autoGroups, &blocked, &pendingApproval, &lastLogin, &createdAt, &u.Issued, &u.IntegrationReference.ID, &u.IntegrationReference.IntegrationType, &u.Email, &u.Name)
+		var tunnelPolicy sql.NullString
+		err := row.Scan(
+			&u.Id,
+			&u.AccountID,
+			&u.Role,
+			&isServiceUser,
+			&nonDeletable,
+			&u.ServiceUserName,
+			&autoGroups,
+			&blocked,
+			&pendingApproval,
+			&lastLogin,
+			&createdAt,
+			&u.Issued,
+			&u.IntegrationReference.ID,
+			&u.IntegrationReference.IntegrationType,
+			&u.Email,
+			&u.Name,
+			&tunnelPolicy,
+			&tunnelPolicyUpdatedAt,
+		)
 		if err == nil {
 			if lastLogin.Valid {
 				u.LastLogin = &lastLogin.Time
@@ -2064,6 +2114,12 @@ func (s *SqlStore) getUsers(ctx context.Context, accountID string) ([]types.User
 			}
 			if pendingApproval.Valid {
 				u.PendingApproval = pendingApproval.Bool
+			}
+			if tunnelPolicy.Valid {
+				u.TunnelPolicy = types.TunnelUserPolicy(tunnelPolicy.String)
+			}
+			if tunnelPolicyUpdatedAt.Valid {
+				u.TunnelPolicyUpdatedAt = tunnelPolicyUpdatedAt.Time
 			}
 			if autoGroups != nil {
 				_ = json.Unmarshal(autoGroups, &u.AutoGroups)

@@ -12,6 +12,7 @@ import (
 	routerTypes "github.com/netbirdio/netbird/management/server/networks/routers/types"
 	"github.com/netbirdio/netbird/management/server/telemetry"
 	"github.com/netbirdio/netbird/route"
+	sharedTypes "github.com/netbirdio/netbird/shared/management/types"
 )
 
 // GetPeerNetworkMapResult dispatches to either the legacy-NetworkMap path or
@@ -140,8 +141,21 @@ func (a *Account) GetPeerNetworkMapComponents(
 		RouterPeers:               make(map[string]*ComponentPeer),
 		NetworkXIDToPublicID:      make(map[string]string, len(a.Networks)),
 		PostureCheckXIDToPublicID: make(map[string]string, len(a.PostureChecks)),
+		UserTunnelPolicies:        make(map[string]sharedTypes.TunnelUserPolicyInfo, len(a.Users)),
 
 		ForceRoutingPeerDNSResolution: a.forcesRoutingPeerDNSResolution(peerID, routers),
+	}
+	for userID, user := range a.Users {
+		if user != nil {
+			policy := user.TunnelPolicy
+			if policy == "" {
+				policy = TunnelUserPolicyInherit
+			}
+			components.UserTunnelPolicies[userID] = sharedTypes.TunnelUserPolicyInfo{
+				Policy:    string(policy),
+				UpdatedAt: user.TunnelPolicyUpdatedAt,
+			}
+		}
 	}
 	for _, n := range a.Networks {
 		if n != nil {

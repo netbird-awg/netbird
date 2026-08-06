@@ -26,6 +26,7 @@ import (
 	"github.com/netbirdio/netbird/client/iface"
 	"github.com/netbirdio/netbird/client/iface/device"
 	"github.com/netbirdio/netbird/client/iface/netstack"
+	"github.com/netbirdio/netbird/client/iface/tunnel"
 	"github.com/netbirdio/netbird/client/internal/dns"
 	"github.com/netbirdio/netbird/client/internal/lazyconn"
 	"github.com/netbirdio/netbird/client/internal/listener"
@@ -600,6 +601,14 @@ func createEngineConfig(key wgtypes.Key, config *profilemanager.Config, peerConf
 		}
 	}
 
+	var tunnelProfile *tunnel.Profile
+	if protoProfile := peerConfig.GetTunnelProfile(); protoProfile != nil {
+		tunnelProfile, err = tunnelProfileFromProto(protoProfile)
+		if err != nil {
+			return nil, fmt.Errorf("parse tunnel profile: %w", err)
+		}
+	}
+
 	engineConf := &EngineConfig{
 		WgIfaceName:                   config.WgIface,
 		WgAddr:                        wgAddr,
@@ -636,6 +645,7 @@ func createEngineConfig(key wgtypes.Key, config *profilemanager.Config, peerConf
 		LogPath: logPath,
 
 		ProfileConfig: config,
+		TunnelProfile: tunnelProfile,
 	}
 
 	if config.PreSharedKey != "" {
@@ -656,6 +666,32 @@ func createEngineConfig(key wgtypes.Key, config *profilemanager.Config, peerConf
 	engineConf.WgPort = port
 
 	return engineConf, nil
+}
+
+func tunnelProfileFromProto(profile *mgmProto.TunnelProfile) (*tunnel.Profile, error) {
+	if profile == nil {
+		return nil, errors.New("tunnel profile is missing")
+	}
+	serverTime := profile.GetServerTime()
+	if serverTime == nil {
+		return nil, errors.New("tunnel profile server time is missing")
+	}
+	if err := serverTime.CheckValid(); err != nil {
+		return nil, fmt.Errorf("invalid tunnel profile server time: %w", err)
+	}
+	skew := time.Since(serverTime.AsTime())
+	if skew < 0 {
+		skew = -skew
+	}
+	const maxClockSkew = 2 * time.Second
+	if skew > maxClockSkew {
+		return nil, fmt.Errorf("management clock skew %s exceeds %s", skew, maxClockSkew)
+	}
+	return tunnel.DecodeProfile(
+		profile.GetProtocolVersion(),
+		profile.GetRevision(),
+		profile.GetParameters(),
+	)
 }
 
 func selectMTU(localMTU uint16, peerMTU int32) uint16 {
