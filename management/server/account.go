@@ -394,6 +394,11 @@ func (am *DefaultAccountManager) UpdateAccountSettings(ctx context.Context, acco
 		if newSettings.Extra == nil {
 			newSettings.Extra = oldSettings.Extra
 		}
+		if oldSettings.LocalMfaEnabled != newSettings.LocalMfaEnabled {
+			if err = am.persistLocalMfaPolicyChange(ctx, transaction, accountID); err != nil {
+				return err
+			}
+		}
 
 		if err = transaction.SaveAccountSettings(ctx, accountID, newSettings); err != nil {
 			return err
@@ -725,6 +730,22 @@ func (am *DefaultAccountManager) handleLocalMfaSettings(ctx context.Context, old
 
 	if err := embeddedIdp.SetMFAEnabled(ctx, newSettings.LocalMfaEnabled); err != nil {
 		return fmt.Errorf("failed to toggle MFA: %w", err)
+	}
+	users, err := am.Store.GetAccountUsers(ctx, store.LockingStrengthNone, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to load users for MFA session revocation: %w", err)
+	}
+	var revocationErr error
+	for _, user := range users {
+		if !dex.IsLocalUserID(user.Id) {
+			continue
+		}
+		if err := embeddedIdp.RevokeUserSessions(ctx, user.Id); err != nil {
+			revocationErr = errors.Join(revocationErr, fmt.Errorf("failed to revoke MFA session for user %s: %w", user.Id, err))
+		}
+	}
+	if revocationErr != nil {
+		return revocationErr
 	}
 
 	if newSettings.LocalMfaEnabled {
@@ -1418,17 +1439,19 @@ func (am *DefaultAccountManager) addNewUserToDomainAccount(ctx context.Context, 
 	newUser := types.NewRegularUser(userAuth.UserId, userAuth.Email, userAuth.Name)
 	newUser.AccountID = domainAccountID
 
-	settings, err := am.Store.GetAccountSettings(ctx, store.LockingStrengthNone, domainAccountID)
-	if err != nil {
-		return "", err
+	if !am.applyExternalPreRegistration(ctx, domainAccountID, userAuth, newUser) {
+		settings, err := am.Store.GetAccountSettings(ctx, store.LockingStrengthNone, domainAccountID)
+		if err != nil {
+			return "", err
+		}
+
+		if settings != nil && settings.Extra != nil && settings.Extra.UserApprovalRequired {
+			newUser.Blocked = true
+			newUser.PendingApproval = true
+		}
 	}
 
-	if settings != nil && settings.Extra != nil && settings.Extra.UserApprovalRequired {
-		newUser.Blocked = true
-		newUser.PendingApproval = true
-	}
-
-	err = am.Store.SaveUser(ctx, newUser)
+	err := am.Store.SaveUser(ctx, newUser)
 	if err != nil {
 		return "", err
 	}
@@ -1601,6 +1624,12 @@ func (am *DefaultAccountManager) GetAccountIDFromUserAuth(ctx context.Context, u
 		// this is not really possible because we got an account by user ID
 		log.Errorf("failed to get user by ID %s: %v", userAuth.UserId, err)
 		return "", "", status.Errorf(status.NotFound, "user %s not found", userAuth.UserId)
+	}
+	if err := am.checkLDAPGroupRestriction(ctx, accountID, userAuth); err != nil {
+		return "", "", err
+	}
+	if !userAuth.IsPAT && user.MFAPolicyUpdatedAt != nil && (userAuth.IssuedAt.IsZero() || !userAuth.IssuedAt.After(*user.MFAPolicyUpdatedAt)) {
+		return "", "", status.Errorf(status.PermissionDenied, "MFA policy changed; authenticate again")
 	}
 
 	if userAuth.IsChild {
@@ -2005,31 +2034,6 @@ func isDomainValid(domain string) bool {
 	return publicDomainRegexp.MatchString(domain)
 }
 
-func (am *DefaultAccountManager) onPeersInvalidated(ctx context.Context, accountID string, peerIDs []string) {
-	peers := []*nbpeer.Peer{}
-	log.WithContext(ctx).Debugf("invalidating peers %v for account %s", peerIDs, accountID)
-	for _, peerID := range peerIDs {
-		peer, err := am.GetPeer(ctx, accountID, peerID, activity.SystemInitiator)
-		if err != nil {
-			log.WithContext(ctx).Errorf("failed to get invalidated peer %s for account %s: %v", peerID, accountID, err)
-			continue
-		}
-		if peer.UserID != "" {
-			peers = append(peers, peer)
-		}
-	}
-	if len(peers) > 0 {
-		err := am.expireAndUpdatePeers(ctx, accountID, peers, peerExpirationValidationFailed)
-		if err != nil {
-			log.WithContext(ctx).Errorf("failed to expire and update invalidated peers for account %s: %v", accountID, err)
-			return
-		}
-	} else {
-		log.WithContext(ctx).Debugf("running invalidation with no invalid peers")
-	}
-	log.WithContext(ctx).Debugf("invalidated peers have been expired for account %s", accountID)
-}
-
 func (am *DefaultAccountManager) FindExistingPostureCheck(accountID string, checks *posture.ChecksDefinition) (*posture.Checks, error) {
 	return am.Store.GetPostureCheckByChecksDefinition(accountID, checks)
 }
@@ -2075,6 +2079,7 @@ func (am *DefaultAccountManager) GetAccountSettings(ctx context.Context, account
 func newAccountWithId(ctx context.Context, accountID, userID, domain, email, name string, disableDefaultPolicy bool) *types.Account {
 	log.WithContext(ctx).Debugf("creating new account")
 
+	createdAt := time.Now().UTC()
 	network := types.NewNetwork()
 	peers := make(map[string]*nbpeer.Peer)
 	users := make(map[string]*types.User)
@@ -2093,7 +2098,7 @@ func newAccountWithId(ctx context.Context, accountID, userID, domain, email, nam
 
 	acc := &types.Account{
 		Id:               accountID,
-		CreatedAt:        time.Now().UTC(),
+		CreatedAt:        createdAt,
 		SetupKeys:        setupKeys,
 		Network:          network,
 		Peers:            peers,
@@ -2117,6 +2122,7 @@ func newAccountWithId(ctx context.Context, accountID, userID, domain, email, nam
 			},
 			LazyConnectionEnabled: true,
 			TunnelPolicy:          types.TunnelAccountPolicyStandard,
+			TunnelPolicyUpdatedAt: createdAt,
 		},
 		Onboarding: types.AccountOnboarding{
 			OnboardingFlowPending: true,
@@ -2193,6 +2199,7 @@ func (am *DefaultAccountManager) GetOrCreateAccountByPrivateDomain(ctx context.C
 			continue
 		}
 
+		createdAt := time.Now().UTC()
 		network := types.NewNetwork()
 		peers := make(map[string]*nbpeer.Peer)
 		users := make(map[string]*types.User)
@@ -2206,7 +2213,7 @@ func (am *DefaultAccountManager) GetOrCreateAccountByPrivateDomain(ctx context.C
 
 		newAccount := &types.Account{
 			Id:        accountId,
-			CreatedAt: time.Now().UTC(),
+			CreatedAt: createdAt,
 			SetupKeys: setupKeys,
 			Network:   network,
 			Peers:     peers,
@@ -2231,7 +2238,8 @@ func (am *DefaultAccountManager) GetOrCreateAccountByPrivateDomain(ctx context.C
 				Extra: &types.ExtraSettings{
 					UserApprovalRequired: true,
 				},
-				TunnelPolicy: types.TunnelAccountPolicyStandard,
+				TunnelPolicy:          types.TunnelAccountPolicyStandard,
+				TunnelPolicyUpdatedAt: createdAt,
 			},
 		}
 

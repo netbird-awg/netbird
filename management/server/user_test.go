@@ -462,8 +462,14 @@ func TestUser_Copy(t *testing.T) {
 			ID:              0,
 			IntegrationType: "test",
 		},
-		Email: "whatever@gmail.com",
-		Name:  "John Doe",
+		Email:                 "whatever@gmail.com",
+		Name:                  "John Doe",
+		TunnelPolicy:          types.TunnelUserPolicyPreferAWG,
+		TunnelPolicyUpdatedAt: time.Now().UTC(),
+		MFAPolicy:             types.MFAPolicyRequired,
+		MFAPolicyUpdatedAt:    util.ToPtr(time.Now().UTC()),
+		MFAFailedAttempts:     2,
+		MFALockedUntil:        util.ToPtr(time.Now().UTC().Add(time.Minute)),
 	}
 
 	err := validateStruct(user)
@@ -1134,6 +1140,7 @@ func TestDefaultAccountManager_GetUser(t *testing.T) {
 	claims := auth.UserAuth{
 		UserId:    mockUserID,
 		AccountId: mockAccountID,
+		IssuedAt:  time.Now().UTC().Truncate(time.Second),
 	}
 
 	user, err := am.GetUserFromUserAuth(context.Background(), claims)
@@ -1144,6 +1151,13 @@ func TestDefaultAccountManager_GetUser(t *testing.T) {
 	assert.Equal(t, mockUserID, user.Id)
 	assert.True(t, user.HasAdminPower())
 	assert.False(t, user.IsBlocked())
+	assert.Equal(t, claims.IssuedAt, user.GetLastLogin())
+
+	storedAccount, err := am.Store.GetAccount(context.Background(), mockAccountID)
+	require.NoError(t, err)
+	storedUser := storedAccount.Users[mockUserID]
+	require.NotNil(t, storedUser)
+	assert.Equal(t, claims.IssuedAt, storedUser.GetLastLogin())
 }
 
 func TestDefaultAccountManager_ListUsers(t *testing.T) {
@@ -1900,6 +1914,8 @@ func TestDefaultAccountManager_GetCurrentUserInfo(t *testing.T) {
 			}
 
 			require.NoError(t, err)
+			tc.expectedResult.UserInfo.MFAPolicy = types.MFAPolicyInherit
+			tc.expectedResult.UserInfo.TunnelPolicy = types.TunnelUserPolicyInherit
 			assert.EqualValues(t, tc.expectedResult, result)
 		})
 	}

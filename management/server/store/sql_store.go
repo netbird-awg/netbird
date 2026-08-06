@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net"
 	"net/netip"
 	"net/url"
@@ -39,6 +38,10 @@ import (
 	rpservice "github.com/netbirdio/netbird/management/internals/modules/reverseproxy/service"
 	"github.com/netbirdio/netbird/management/internals/modules/zones"
 	"github.com/netbirdio/netbird/management/internals/modules/zones/records"
+	edrmodel "github.com/netbirdio/netbird/management/server/localintegrations/edr/model"
+	eventstreamingmodel "github.com/netbirdio/netbird/management/server/localintegrations/eventstreaming/model"
+	ldapsyncmodel "github.com/netbirdio/netbird/management/server/localintegrations/ldapsync/model"
+	scimmodel "github.com/netbirdio/netbird/management/server/localintegrations/scim/model"
 	resourceTypes "github.com/netbirdio/netbird/management/server/networks/resources/types"
 	routerTypes "github.com/netbirdio/netbird/management/server/networks/routers/types"
 	networkTypes "github.com/netbirdio/netbird/management/server/networks/types"
@@ -143,6 +146,9 @@ func NewSqlStore(ctx context.Context, db *gorm.DB, storeEngine types.Engine, met
 		&agentNetworkTypes.Consumption{}, &agentNetworkTypes.AccountBudgetRule{},
 		&agentNetworkTypes.AgentNetworkAccessLog{}, &agentNetworkTypes.AgentNetworkAccessLogGroup{},
 		&agentNetworkTypes.AgentNetworkUsage{}, &agentNetworkTypes.AgentNetworkUsageGroup{},
+		&ldapsyncmodel.Config{}, &ldapsyncmodel.Run{}, &ldapsyncmodel.Object{},
+		&scimmodel.Integration{}, &scimmodel.Resource{}, &scimmodel.SyncLog{},
+		&eventstreamingmodel.Integration{}, &eventstreamingmodel.Outbox{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("auto migratePreAuto: %w", err)
@@ -285,6 +291,7 @@ func (s *SqlStore) SaveAccount(ctx context.Context, account *types.Account) erro
 	// todo: remove this check after the issue is resolved
 	s.checkAccountDomainBeforeSave(ctx, account.Id, account.Domain)
 
+	ensureAccountTunnelPolicyTimestamps(account)
 	generateAccountSQLTypes(account)
 
 	// Encrypt sensitive user data before saving
@@ -331,6 +338,32 @@ func (s *SqlStore) SaveAccount(ctx context.Context, account *types.Account) erro
 	log.WithContext(ctx).Debugf("took %d ms to persist an account to the store", took.Milliseconds())
 
 	return err
+}
+
+func ensureAccountTunnelPolicyTimestamps(account *types.Account) {
+	if account.Settings != nil {
+		ensureTunnelPolicyTimestamp(
+			&account.Settings.TunnelPolicyUpdatedAt,
+			account.CreatedAt,
+		)
+	}
+
+	for _, user := range account.Users {
+		ensureTunnelPolicyTimestamp(
+			&user.TunnelPolicyUpdatedAt,
+			user.CreatedAt,
+		)
+	}
+}
+
+func ensureTunnelPolicyTimestamp(updatedAt *time.Time, createdAt time.Time) {
+	if !updatedAt.IsZero() {
+		return
+	}
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	*updatedAt = createdAt
 }
 
 // generateAccountSQLTypes generates the GORM compatible types for the account
@@ -394,6 +427,24 @@ func (s *SqlStore) DeleteAccount(ctx context.Context, account *types.Account) er
 	start := time.Now()
 
 	err := s.transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&edrmodel.Bypass{}) {
+			if result := tx.Where("account_id = ?", account.Id).Delete(&edrmodel.Bypass{}); result.Error != nil {
+				return result.Error
+			}
+		}
+
+		if tx.Migrator().HasTable(&edrmodel.Device{}) {
+			if result := tx.Where("account_id = ?", account.Id).Delete(&edrmodel.Device{}); result.Error != nil {
+				return result.Error
+			}
+		}
+
+		if tx.Migrator().HasTable(&edrmodel.Integration{}) {
+			if result := tx.Where("account_id = ?", account.Id).Delete(&edrmodel.Integration{}); result.Error != nil {
+				return result.Error
+			}
+		}
+
 		result := tx.Select(clause.Associations).Delete(account.Policies, "account_id = ?", account.Id)
 		if result.Error != nil {
 			return result.Error
@@ -428,7 +479,11 @@ func (s *SqlStore) DeleteAccount(ctx context.Context, account *types.Account) er
 
 func (s *SqlStore) SaveInstallationID(_ context.Context, ID string) error {
 	installation := installation{InstallationIDValue: ID}
-	installation.ID = uint(s.installationPK)
+	installationID, err := checkedIntToUint("installation primary key", s.installationPK)
+	if err != nil {
+		return err
+	}
+	installation.ID = installationID
 
 	return s.db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&installation).Error
 }
@@ -610,6 +665,10 @@ func (s *SqlStore) SaveUsers(ctx context.Context, users []*types.User) error {
 		userCopy := user.Copy()
 		userCopy.Email = user.Email
 		userCopy.Name = user.Name
+		ensureTunnelPolicyTimestamp(
+			&userCopy.TunnelPolicyUpdatedAt,
+			userCopy.CreatedAt,
+		)
 		if err := userCopy.EncryptSensitiveData(s.fieldEncrypt); err != nil {
 			return fmt.Errorf("encrypt user: %w", err)
 		}
@@ -629,6 +688,10 @@ func (s *SqlStore) SaveUser(ctx context.Context, user *types.User) error {
 	userCopy := user.Copy()
 	userCopy.Email = user.Email
 	userCopy.Name = user.Name
+	ensureTunnelPolicyTimestamp(
+		&userCopy.TunnelPolicyUpdatedAt,
+		userCopy.CreatedAt,
+	)
 
 	if err := userCopy.EncryptSensitiveData(s.fieldEncrypt); err != nil {
 		return fmt.Errorf("encrypt user: %w", err)
@@ -1713,7 +1776,11 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 		account.Network.Dns = networkDns.String
 	}
 	if networkSerial.Valid {
-		account.Network.Serial = uint64(networkSerial.Int64)
+		serial, err := checkedInt64ToUint64("network serial", networkSerial.Int64)
+		if err != nil {
+			return nil, fmt.Errorf("decode account %s: %w", accountID, err)
+		}
+		account.Network.Serial = serial
 	}
 	if sPeerLoginExpirationEnabled.Valid {
 		account.Settings.PeerLoginExpirationEnabled = sPeerLoginExpirationEnabled.Bool
@@ -2007,7 +2074,11 @@ func (s *SqlStore) getPeers(ctx context.Context, accountID string) ([]nbpeer.Pee
 				p.Location.CityName = locationCityName.String
 			}
 			if locationGeoNameID.Valid {
-				p.Location.GeoNameID = uint(locationGeoNameID.Int64)
+				geoNameID, err := checkedInt64ToUint("peer geoname ID", locationGeoNameID.Int64)
+				if err != nil {
+					return p, err
+				}
+				p.Location.GeoNameID = geoNameID
 			}
 			if proxyEmbedded.Valid {
 				p.ProxyMeta.Embedded = proxyEmbedded.Bool
@@ -2456,10 +2527,11 @@ func scanService(row pgx.CollectableRow) (*rpservice.Service, error) {
 		s.PortAutoAssigned = portAutoAssigned.Bool
 	}
 	if listenPort.Valid {
-		if listenPort.Int64 < 0 || listenPort.Int64 > math.MaxUint16 {
-			return nil, fmt.Errorf("listen_port %d out of range", listenPort.Int64)
+		port, err := checkedInt64ToUint16("reverse proxy listen port", listenPort.Int64)
+		if err != nil {
+			return nil, err
 		}
-		s.ListenPort = uint16(listenPort.Int64)
+		s.ListenPort = port
 	}
 	s.Targets = []*rpservice.Target{}
 	return &s, nil
@@ -4422,8 +4494,14 @@ func (s *SqlStore) SaveDNSSettings(ctx context.Context, accountID string, settin
 
 // SaveAccountSettings stores the account settings in DB.
 func (s *SqlStore) SaveAccountSettings(ctx context.Context, accountID string, settings *types.Settings) error {
+	settingsCopy := *settings
+	ensureTunnelPolicyTimestamp(
+		&settingsCopy.TunnelPolicyUpdatedAt,
+		time.Time{},
+	)
 	result := s.db.Model(&types.Account{}).
-		Select("*").Where(idQueryCondition, accountID).Updates(&types.AccountSettings{Settings: settings})
+		Select("*").Where(idQueryCondition, accountID).
+		Updates(&types.AccountSettings{Settings: &settingsCopy})
 	if result.Error != nil {
 		log.WithContext(ctx).Errorf("failed to save account settings to store: %v", result.Error)
 		return status.Errorf(status.Internal, "failed to save account settings to store")

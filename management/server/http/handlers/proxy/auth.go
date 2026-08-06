@@ -110,7 +110,7 @@ func (h *AuthCallbackHandler) handleCallback(w http.ResponseWriter, r *http.Requ
 		query.Set("error", "access_denied")
 		query.Set("error_description", "Service configuration error")
 		redirectURL.RawQuery = query.Encode()
-		http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+		http.Redirect(w, r, redirectURL.String(), http.StatusFound) // #nosec G710 -- HMAC-protected, one-time state was allowlisted against an account service domain
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *AuthCallbackHandler) handleCallback(w http.ResponseWriter, r *http.Requ
 	redirectURL.RawQuery = query.Encode()
 
 	log.WithField("redirect", redirectURL.Host).Debug("OAuth callback: redirecting user with session token")
-	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+	http.Redirect(w, r, redirectURL.String(), http.StatusFound) // #nosec G710 -- HMAC-protected, one-time state was allowlisted against an account service domain
 }
 
 func extractUserIDFromToken(ctx context.Context, provider *oidc.Provider, config nbgrpc.ProxyOIDCConfig, token *oauth2.Token) string {

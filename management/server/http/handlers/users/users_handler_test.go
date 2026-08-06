@@ -635,6 +635,7 @@ func TestCurrentUser(t *testing.T) {
 				AutoGroups:    []string{},
 				Issued:        ptr("api"),
 				LastLogin:     ptr(time.Time{}),
+				MfaPolicy:     api.UserMfaPolicyInherit,
 				Permissions: &api.UserPermissions{
 					Modules: stringifyPermissionsKeys(mergeRolePermissions(roles.Owner)),
 				},
@@ -654,6 +655,7 @@ func TestCurrentUser(t *testing.T) {
 				AutoGroups:    []string{},
 				Issued:        ptr("api"),
 				LastLogin:     ptr(time.Time{}),
+				MfaPolicy:     api.UserMfaPolicyInherit,
 				Permissions: &api.UserPermissions{
 					Modules: stringifyPermissionsKeys(mergeRolePermissions(roles.User)),
 				},
@@ -673,6 +675,7 @@ func TestCurrentUser(t *testing.T) {
 				AutoGroups:    []string{},
 				Issued:        ptr("api"),
 				LastLogin:     ptr(time.Time{}),
+				MfaPolicy:     api.UserMfaPolicyInherit,
 				Permissions: &api.UserPermissions{
 					Modules: stringifyPermissionsKeys(mergeRolePermissions(roles.Admin)),
 				},
@@ -692,6 +695,7 @@ func TestCurrentUser(t *testing.T) {
 				AutoGroups:    []string{},
 				Issued:        ptr("api"),
 				LastLogin:     ptr(time.Time{}),
+				MfaPolicy:     api.UserMfaPolicyInherit,
 				Permissions: &api.UserPermissions{
 					IsRestricted: true,
 					Modules:      stringifyPermissionsKeys(mergeRolePermissions(roles.User)),

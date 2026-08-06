@@ -9,13 +9,12 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/netbirdio/netbird/management/server/account"
+	nbcontext "github.com/netbirdio/netbird/management/server/context"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/management/server/users"
 	"github.com/netbirdio/netbird/shared/management/http/api"
 	"github.com/netbirdio/netbird/shared/management/http/util"
 	"github.com/netbirdio/netbird/shared/management/status"
-
-	nbcontext "github.com/netbirdio/netbird/management/server/context"
 )
 
 // handler is a handler that returns users of the account
@@ -105,6 +104,15 @@ func (h *handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		tunnelPolicy = types.TunnelUserPolicy(*req.TunnelPolicy)
 	}
 
+	mfaPolicy := existingUser.MFAPolicy.Normalized()
+	if req.MfaPolicy != nil {
+		mfaPolicy = types.MFAPolicy(*req.MfaPolicy)
+		if !mfaPolicy.IsValid() {
+			util.WriteError(r.Context(), status.Errorf(status.InvalidArgument, "invalid MFA policy"), w)
+			return
+		}
+	}
+
 	newUser, err := h.accountManager.SaveUser(r.Context(), accountID, userID, &types.User{
 		Id:                   targetUserID,
 		Role:                 userRole,
@@ -113,6 +121,7 @@ func (h *handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		Issued:               existingUser.Issued,
 		IntegrationReference: existingUser.IntegrationReference,
 		TunnelPolicy:         tunnelPolicy,
+		MFAPolicy:            mfaPolicy,
 	})
 
 	if err != nil {
@@ -188,6 +197,11 @@ func (h *handler) createUser(w http.ResponseWriter, r *http.Request) {
 		name = *req.Name
 	}
 
+	idpID := ""
+	if req.IdpId != nil {
+		idpID = *req.IdpId
+	}
+
 	newUser, err := h.accountManager.CreateUser(r.Context(), accountID, userID, &types.UserInfo{
 		Email:         email,
 		Name:          name,
@@ -195,12 +209,13 @@ func (h *handler) createUser(w http.ResponseWriter, r *http.Request) {
 		AutoGroups:    req.AutoGroups,
 		IsServiceUser: req.IsServiceUser,
 		Issued:        types.UserIssuedAPI,
+		IdPID:         idpID,
 	})
 	if err != nil {
 		util.WriteError(r.Context(), err, w)
 		return
 	}
-	util.WriteJSONObject(r.Context(), w, toUserResponse(newUser, userID))
+	util.WriteJSONObject(r.Context(), w, toUserCreationResponse(newUser, userID))
 }
 
 // getAllUsers returns a list of users of the account this user belongs to.
@@ -344,32 +359,28 @@ func toUserResponse(user *types.UserInfo, currenUserID string) *api.User {
 
 	isCurrent := user.ID == currenUserID
 
-	var password *string
-	if user.Password != "" {
-		password = &user.Password
-	}
-
 	var idpID *string
 	if user.IdPID != "" {
 		idpID = &user.IdPID
 	}
 
 	return &api.User{
-		Id:              user.ID,
-		Name:            user.Name,
-		Email:           user.Email,
-		Role:            user.Role,
-		AutoGroups:      autoGroups,
-		Status:          userStatus,
-		IsCurrent:       &isCurrent,
-		IsServiceUser:   &user.IsServiceUser,
-		IsBlocked:       user.IsBlocked,
-		LastLogin:       &user.LastLogin,
-		Issued:          &user.Issued,
-		PendingApproval: user.PendingApproval,
-		Password:        password,
-		IdpId:           idpID,
-		TunnelPolicy:    toAPIUserTunnelPolicy(user.TunnelPolicy),
+		Id:                  user.ID,
+		Name:                user.Name,
+		Email:               user.Email,
+		Role:                user.Role,
+		AutoGroups:          autoGroups,
+		Status:              userStatus,
+		IsCurrent:           &isCurrent,
+		IsServiceUser:       &user.IsServiceUser,
+		IsBlocked:           user.IsBlocked,
+		LastLogin:           &user.LastLogin,
+		Issued:              &user.Issued,
+		PendingApproval:     user.PendingApproval,
+		IdpId:               idpID,
+		TunnelPolicy:        toAPIUserTunnelPolicy(user.TunnelPolicy),
+		ForcePasswordChange: user.ForcePasswordChange,
+		MfaPolicy:           api.UserMfaPolicy(user.MFAPolicy.Normalized()),
 	}
 }
 
@@ -381,6 +392,16 @@ func toAPIUserTunnelPolicy(
 	}
 	result := api.UserTunnelPolicy(policy)
 	return &result
+}
+
+// toUserCreationResponse is the only response path allowed to expose the
+// one-time generated password returned by an IdP during user creation.
+func toUserCreationResponse(user *types.UserInfo, currentUserID string) *api.User {
+	response := toUserResponse(user, currentUserID)
+	if user.Password != "" {
+		response.Password = &user.Password
+	}
+	return response
 }
 
 // approveUser is a POST request to approve a user that is pending approval
@@ -469,7 +490,7 @@ func (h *handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req passwordChangeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSONBody(w, r, &req); err != nil {
 		util.WriteErrorResponse("couldn't parse JSON request", http.StatusBadRequest, w)
 		return
 	}

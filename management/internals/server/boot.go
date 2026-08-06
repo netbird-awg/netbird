@@ -36,6 +36,10 @@ import (
 	nbhttp "github.com/netbirdio/netbird/management/server/http"
 	"github.com/netbirdio/netbird/management/server/http/middleware"
 	"github.com/netbirdio/netbird/management/server/idp"
+	"github.com/netbirdio/netbird/management/server/localintegrations/edr"
+	"github.com/netbirdio/netbird/management/server/localintegrations/eventstreaming"
+	"github.com/netbirdio/netbird/management/server/localintegrations/ldapsync"
+	localscim "github.com/netbirdio/netbird/management/server/localintegrations/scim"
 	"github.com/netbirdio/netbird/management/server/store"
 	"github.com/netbirdio/netbird/management/server/telemetry"
 	mgmtProto "github.com/netbirdio/netbird/shared/management/proto"
@@ -116,6 +120,19 @@ func (s *BaseServer) EventStore() activity.Store {
 			log.Fatalf("failed to initialize event store: %v", err)
 		}
 
+		if eventstreaming.Enabled() {
+			streamingStore, err := eventstreaming.NewService(
+				eventStore,
+				s.Store(),
+				s.PermissionsManager(),
+				s.Config.DataStoreEncryptionKey,
+			)
+			if err != nil {
+				log.Fatalf("failed to initialize local event streaming: %v", err)
+			}
+			return streamingStore
+		}
+
 		return eventStore
 	})
 }
@@ -125,6 +142,21 @@ func (s *BaseServer) APIHandler() http.Handler {
 		httpAPIHandler, err := nbhttp.NewAPIHandler(context.Background(), s.Router(), s.AccountManager(), s.NetworksManager(), s.ResourcesManager(), s.RoutesManager(), s.GroupsManager(), s.GeoLocationManager(), s.AuthManager(), s.Metrics(), s.PermissionsManager(), s.SettingsManager(), s.ZonesManager(), s.RecordsManager(), s.NetworkMapController(), s.IdpManager(), s.ServiceManager(), s.ReverseProxyDomainManager(), s.AccessLogsManager(), s.ReverseProxyGRPCServer(), s.Config.ReverseProxy.TrustedHTTPProxies, s.RateLimiter(), s.IsValidChildAccount, s.AgentNetworkManager())
 		if err != nil {
 			log.Fatalf("failed to create API handler: %v", err)
+		}
+		if ldapsync.Enabled() {
+			ldapsync.RegisterEndpoints(s.LocalLDAPSyncService(), s.Router(), ldapsync.SyncEnabled())
+		}
+		if localscim.Enabled() {
+			localscim.RegisterAPIEndpoints(s.LocalSCIMService(), s.Router())
+			if err := localscim.RegisterProtocolEndpoints(s.LocalSCIMService(), s.Router()); err != nil {
+				log.Fatalf("failed to register local SCIM endpoints: %v", err)
+			}
+		}
+		if eventstreaming.Enabled() {
+			eventstreaming.RegisterAPIEndpoints(s.LocalEventStreamingService(), s.Router())
+		}
+		if edr.Enabled() {
+			edr.RegisterAPIEndpoints(s.LocalEDRService(), s.Router())
 		}
 		return httpAPIHandler
 	})

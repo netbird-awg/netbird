@@ -17,7 +17,7 @@ type ConnectorConfig struct {
 	ID string
 	// Name is a human-readable name for the connector
 	Name string
-	// Type is the connector type (oidc, google, microsoft)
+	// Type is the connector type (oidc, google, microsoft, ldap)
 	Type string
 	// Issuer is the OIDC issuer URL (for OIDC-based connectors)
 	Issuer string
@@ -27,6 +27,12 @@ type ConnectorConfig struct {
 	ClientSecret string
 	// RedirectURI is the OAuth2 redirect URI
 	RedirectURI string
+	// AccountID is NetBird ownership metadata. It is persisted inside the
+	// encrypted connector configuration and ignored by upstream Dex connector
+	// implementations.
+	AccountID string
+	// LDAP holds LDAP-specific configuration (only used when Type is "ldap")
+	LDAP *LDAPConnectorConfig
 }
 
 // CreateConnector creates a new connector in Dex storage.
@@ -132,6 +138,29 @@ func overlayConnectorConfig(oldConfig []byte, cfg *ConnectorConfig) ([]byte, err
 	if err := decodeConnectorConfig(oldConfig, &m); err != nil {
 		return nil, err
 	}
+
+	if cfg.Type == "ldap" {
+		if cfg.LDAP == nil {
+			return encodeConnectorConfig(m)
+		}
+		ldapConfig, err := buildLDAPConnectorConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+		var updated map[string]any
+		if err := decodeConnectorConfig(ldapConfig, &updated); err != nil {
+			return nil, err
+		}
+		if cfg.LDAP.BindPW == "" {
+			updated["bindPW"] = m["bindPW"]
+		}
+		copyNetBirdConnectorMetadata(m, updated)
+		if cfg.AccountID != "" {
+			updated[netBirdAccountIDConfigKey] = cfg.AccountID
+		}
+		return encodeConnectorConfig(updated)
+	}
+
 	if cfg.Issuer != "" {
 		m["issuer"] = cfg.Issuer
 	}
@@ -143,6 +172,9 @@ func overlayConnectorConfig(oldConfig []byte, cfg *ConnectorConfig) ([]byte, err
 	}
 	if cfg.RedirectURI != "" {
 		m["redirectURI"] = cfg.RedirectURI
+	}
+	if cfg.AccountID != "" {
+		m[netBirdAccountIDConfigKey] = cfg.AccountID
 	}
 	return encodeConnectorConfig(m)
 }
@@ -193,6 +225,9 @@ func (p *Provider) buildStorageConnector(cfg *ConnectorConfig) (storage.Connecto
 	case "microsoft":
 		dexType = "microsoft"
 		configData, err = buildOAuth2ConnectorConfig(cfg, redirectURI)
+	case "ldap":
+		dexType = "ldap"
+		configData, err = buildLDAPConnectorConfig(cfg)
 	default:
 		return storage.Connector{}, fmt.Errorf("unsupported connector type: %s", cfg.Type)
 	}
@@ -227,6 +262,7 @@ func buildOIDCConnectorConfig(cfg *ConnectorConfig, redirectURI string) ([]byte,
 		//some providers don't return email verified, so we need to skip it if not present (e.g., Entra, Okta, Duo)
 		"insecureSkipEmailVerified": true,
 	}
+	addNetBirdConnectorMetadata(oidcConfig, cfg)
 	switch cfg.Type {
 	case "zitadel":
 		oidcConfig["getUserInfo"] = true
@@ -248,11 +284,13 @@ func buildOIDCConnectorConfig(cfg *ConnectorConfig, redirectURI string) ([]byte,
 
 // buildOAuth2ConnectorConfig creates config for OAuth2 connectors (google, microsoft)
 func buildOAuth2ConnectorConfig(cfg *ConnectorConfig, redirectURI string) ([]byte, error) {
-	return encodeConnectorConfig(map[string]interface{}{
+	config := map[string]interface{}{
 		"clientID":     cfg.ClientID,
 		"clientSecret": cfg.ClientSecret,
 		"redirectURI":  redirectURI,
-	})
+	}
+	addNetBirdConnectorMetadata(config, cfg)
+	return encodeConnectorConfig(config)
 }
 
 // parseStorageConnector converts a storage.Connector back to ConnectorConfig.
@@ -272,8 +310,18 @@ func (p *Provider) parseStorageConnector(conn storage.Connector) (*ConnectorConf
 	if err := decodeConnectorConfig(conn.Config, &configMap); err != nil {
 		return nil, fmt.Errorf("failed to parse connector config: %w", err)
 	}
+	if v, ok := configMap[netBirdAccountIDConfigKey].(string); ok {
+		cfg.AccountID = v
+	}
 
-	// Extract common fields
+	// Handle LDAP connectors differently
+	if conn.Type == "ldap" {
+		cfg.Type = "ldap"
+		cfg.LDAP = parseLDAPConfigMap(configMap)
+		return cfg, nil
+	}
+
+	// Extract common fields for OIDC/OAuth connectors
 	if v, ok := configMap["clientID"].(string); ok {
 		cfg.ClientID = v
 	}
@@ -321,6 +369,20 @@ func encodeConnectorConfig(config map[string]interface{}) ([]byte, error) {
 // decodeConnectorConfig deserializes connector config from JSON bytes.
 func decodeConnectorConfig(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
+}
+
+const netBirdAccountIDConfigKey = "netbirdAccountID"
+
+func addNetBirdConnectorMetadata(config map[string]interface{}, cfg *ConnectorConfig) {
+	if cfg.AccountID != "" {
+		config[netBirdAccountIDConfigKey] = cfg.AccountID
+	}
+}
+
+func copyNetBirdConnectorMetadata(from, to map[string]interface{}) {
+	if accountID, ok := from[netBirdAccountIDConfigKey].(string); ok && accountID != "" {
+		to[netBirdAccountIDConfigKey] = accountID
+	}
 }
 
 // ensureLocalConnector creates a local (password) connector if it doesn't exist
@@ -422,7 +484,18 @@ func ensureStaticConnectors(ctx context.Context, stor storage.Storage, connector
 		}
 		if err := stor.UpdateConnector(ctx, conn.ID, func(old storage.Connector) (storage.Connector, error) {
 			old.Name = storConn.Name
-			old.Config = storConn.Config
+			var oldConfig, updatedConfig map[string]interface{}
+			if err := decodeConnectorConfig(old.Config, &oldConfig); err != nil {
+				return storage.Connector{}, err
+			}
+			if err := decodeConnectorConfig(storConn.Config, &updatedConfig); err != nil {
+				return storage.Connector{}, err
+			}
+			copyNetBirdConnectorMetadata(oldConfig, updatedConfig)
+			old.Config, err = encodeConnectorConfig(updatedConfig)
+			if err != nil {
+				return storage.Connector{}, err
+			}
 			return old, nil
 		}); err != nil {
 			return fmt.Errorf("failed to update connector %s: %w", conn.ID, err)

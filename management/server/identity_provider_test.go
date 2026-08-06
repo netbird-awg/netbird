@@ -214,6 +214,40 @@ func TestDefaultAccountManager_UpdateIdentityProvider_Validation(t *testing.T) {
 	assert.Contains(t, err.Error(), "name is required")
 }
 
+func TestDefaultAccountManager_IdentityProviderAccountIsolation(t *testing.T) {
+	manager, _, err := createManagerWithEmbeddedIdP(t)
+	require.NoError(t, err)
+
+	accountOne, err := manager.GetOrCreateAccountByUser(context.Background(), auth.UserAuth{UserId: "owner-one"})
+	require.NoError(t, err)
+	created, err := manager.CreateIdentityProvider(context.Background(), accountOne.Id, "owner-one", &types.IdentityProvider{
+		Name:      "Account One LDAP",
+		Type:      types.IdentityProviderTypeLDAP,
+		AccountID: accountOne.Id,
+		IdentityProviderLDAP: types.IdentityProviderLDAP{
+			LDAPHost:                "ldap.example.com:636",
+			LDAPBindDN:              "cn=admin,dc=example,dc=com",
+			LDAPBindPW:              "secret",
+			LDAPUserSearchBaseDN:    "ou=people,dc=example,dc=com",
+			LDAPUserSearchUsername:  "uid",
+			LDAPUserSearchIDAttr:    "entryUUID",
+			LDAPUserSearchEmailAttr: "mail",
+			LDAPUserSearchNameAttr:  "cn",
+		},
+	})
+	require.NoError(t, err)
+
+	accountTwo, err := manager.GetOrCreateAccountByUser(context.Background(), auth.UserAuth{UserId: "owner-two"})
+	require.NoError(t, err)
+	_, err = manager.GetIdentityProvider(context.Background(), accountTwo.Id, created.ID, "owner-two")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+
+	providers, err := manager.GetIdentityProviders(context.Background(), accountTwo.Id, "owner-two")
+	require.NoError(t, err)
+	assert.Empty(t, providers)
+}
+
 func TestValidateOIDCIssuer(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -262,7 +296,7 @@ func TestValidateOIDCIssuer(t *testing.T) {
 			server := tt.setupServer()
 			defer server.Close()
 
-			err := validateOIDCIssuer(context.Background(), server.URL)
+			err := validateOIDCIssuerWithHTTPClient(context.Background(), server.URL, server.Client())
 
 			require.Error(t, err)
 			assert.True(t, errors.Is(err, tt.expectedErr), "expected error %v, got %v", tt.expectedErr, err)
@@ -287,7 +321,7 @@ func TestValidateOIDCIssuer_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := validateOIDCIssuer(context.Background(), server.URL)
+	err := validateOIDCIssuerWithHTTPClient(context.Background(), server.URL, server.Client())
 	require.NoError(t, err)
 }
 
@@ -314,8 +348,19 @@ func TestValidateOIDCIssuer_TrailingSlash(t *testing.T) {
 	defer server.Close()
 
 	// Pass issuer with trailing slash
-	err := validateOIDCIssuer(context.Background(), server.URL+"/")
+	err := validateOIDCIssuerWithHTTPClient(context.Background(), server.URL+"/", server.Client())
 	// This should fail because the issuer returned doesn't have trailing slash
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.ErrIdentityProviderIssuerMismatch))
+}
+
+func TestValidateOIDCIssuer_DiscoveryResponseLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(make([]byte, (1<<20)+1))
+	}))
+	defer server.Close()
+
+	err := validateOIDCIssuerWithHTTPClient(context.Background(), server.URL, server.Client())
+	require.ErrorContains(t, err, "exceeds")
+	assert.True(t, errors.Is(err, types.ErrIdentityProviderIssuerUnreachable))
 }

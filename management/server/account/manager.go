@@ -144,6 +144,7 @@ type Manager interface {
 	CreateIdentityProvider(ctx context.Context, accountID, userID string, idp *types.IdentityProvider) (*types.IdentityProvider, error)
 	UpdateIdentityProvider(ctx context.Context, accountID, idpID, userID string, idp *types.IdentityProvider) (*types.IdentityProvider, error)
 	DeleteIdentityProvider(ctx context.Context, accountID, idpID, userID string) error
+	ListLDAPGroups(ctx context.Context, accountID, idpID, userID string) ([]string, error)
 	CreatePeerJob(ctx context.Context, accountID, peerID, userID string, job *types.Job) error
 	GetAllPeerJobs(ctx context.Context, accountID, userID, peerID string) ([]*types.Job, error)
 	GetPeerJobByID(ctx context.Context, accountID, userID, peerID, jobID string) (*types.Job, error)

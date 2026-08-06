@@ -8,6 +8,7 @@ import (
 
 	"github.com/netbirdio/management-integrations/integrations"
 
+	"github.com/netbirdio/netbird/management/internals/modules/agentnetwork"
 	"github.com/netbirdio/netbird/management/internals/modules/peers"
 	"github.com/netbirdio/netbird/management/internals/modules/reverseproxy/domain/manager"
 	"github.com/netbirdio/netbird/management/internals/modules/reverseproxy/proxy"
@@ -20,10 +21,13 @@ import (
 	recordsManager "github.com/netbirdio/netbird/management/internals/modules/zones/records/manager"
 	"github.com/netbirdio/netbird/management/server"
 	"github.com/netbirdio/netbird/management/server/account"
-	"github.com/netbirdio/netbird/management/internals/modules/agentnetwork"
 	"github.com/netbirdio/netbird/management/server/geolocation"
 	"github.com/netbirdio/netbird/management/server/groups"
 	"github.com/netbirdio/netbird/management/server/idp"
+	"github.com/netbirdio/netbird/management/server/localintegrations/edr"
+	"github.com/netbirdio/netbird/management/server/localintegrations/eventstreaming"
+	"github.com/netbirdio/netbird/management/server/localintegrations/ldapsync"
+	localscim "github.com/netbirdio/netbird/management/server/localintegrations/scim"
 	"github.com/netbirdio/netbird/management/server/networks"
 	"github.com/netbirdio/netbird/management/server/networks/resources"
 	"github.com/netbirdio/netbird/management/server/networks/routers"
@@ -109,6 +113,59 @@ func (s *BaseServer) AccountManager() account.Manager {
 	})
 }
 
+func (s *BaseServer) LocalLDAPSyncService() *ldapsync.Service {
+	return Create(s, func() *ldapsync.Service {
+		return ldapsync.NewService(
+			s.Config.DataStoreEncryptionKey,
+			s.Store(),
+			s.PermissionsManager(),
+			s.IdpManager(),
+			s.AccountManager(),
+			s.Metrics().GetMeter(),
+		)
+	})
+}
+
+func (s *BaseServer) LocalSCIMService() *localscim.Service {
+	return Create(s, func() *localscim.Service {
+		service, err := localscim.NewService(
+			s.Config.DataStoreEncryptionKey,
+			s.Store(),
+			s.PermissionsManager(),
+			s.IdpManager(),
+			s.AccountManager(),
+			s.Metrics().GetMeter(),
+		)
+		if err != nil {
+			log.Fatalf("failed to initialize local SCIM service: %v", err)
+		}
+		return service
+	})
+}
+
+func (s *BaseServer) LocalEventStreamingService() *eventstreaming.Service {
+	service, ok := s.EventStore().(*eventstreaming.Service)
+	if !ok {
+		log.Fatal("local event streaming service was not initialized")
+	}
+	return service
+}
+
+func (s *BaseServer) LocalEDRService() *edr.Service {
+	return Create(s, func() *edr.Service {
+		service, err := edr.NewService(
+			s.Store(),
+			s.PermissionsManager(),
+			s.EventStore(),
+			s.Config.DataStoreEncryptionKey,
+		)
+		if err != nil {
+			log.Fatalf("failed to initialize local EDR integrations: %v", err)
+		}
+		return service
+	})
+}
+
 func isMFAEnabledForAccount(accounts []*types.Account) bool {
 	if len(accounts) != 1 {
 		return false
@@ -124,10 +181,18 @@ func (s *BaseServer) IdpManager() idp.Manager {
 		// Legacy IdpManager won't be used anymore even if configured.
 		embeddedEnabled := s.Config.EmbeddedIdP != nil && s.Config.EmbeddedIdP.Enabled
 		if embeddedEnabled {
-			embeddedMgr, err := idp.NewEmbeddedIdPManager(context.Background(), s.Config.EmbeddedIdP, s.Metrics())
+			embeddedConfig := *s.Config.EmbeddedIdP
+			if embeddedConfig.MFASecretEncryptionKey == "" {
+				embeddedConfig.MFASecretEncryptionKey = s.Config.DataStoreEncryptionKey
+			}
+			embeddedMgr, err := idp.NewEmbeddedIdPManager(context.Background(), &embeddedConfig, s.Metrics())
 			if err != nil {
 				log.Fatalf("failed to create embedded IDP service: %v", err)
 			}
+
+			mfaPolicy := newMFAPolicyService(s.Store(), embeddedMgr)
+			embeddedMgr.SetMFARequirementResolver(mfaPolicy.Requirement)
+			embeddedMgr.SetMFAAttemptLimiter(mfaPolicy)
 
 			if val := isMFAEnabledForAccount(s.Store().GetAllAccounts(context.Background())); val {
 				if err := embeddedMgr.SetMFAEnabled(context.Background(), val); err != nil {

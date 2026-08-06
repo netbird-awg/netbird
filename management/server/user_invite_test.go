@@ -757,6 +757,7 @@ func TestValidatePassword(t *testing.T) {
 		{"no uppercase no special", "password1", true, "one uppercase"},
 		{"all lowercase short", "pass", true, "at least 8 characters"},
 		{"empty", "", true, "at least 8 characters"},
+		{"too long", "Password1!Password1!Password1!Password1!Password1!Password1!Password1!Password1!", true, "at most 72 bytes"},
 		{"spaces count as special", "Pass word1", false, ""},
 	}
 

@@ -22,6 +22,7 @@ import (
 	"github.com/netbirdio/netbird/management/server/integrations/integrated_validator/validator"
 	"github.com/netbirdio/netbird/management/server/integrations/port_forwarding"
 	"github.com/netbirdio/netbird/management/server/job"
+	"github.com/netbirdio/netbird/management/server/localintegrations/edr"
 	nbjwt "github.com/netbirdio/netbird/shared/auth/jwt"
 )
 
@@ -39,6 +40,9 @@ func (s *BaseServer) JobManager() *job.Manager {
 
 func (s *BaseServer) IntegratedValidator() integrated_validator.IntegratedValidator {
 	return Create(s, func() integrated_validator.IntegratedValidator {
+		if edr.Enabled() {
+			return s.LocalEDRService()
+		}
 		integratedPeerValidator, err := validator.NewIntegratedValidator(
 			context.Background(),
 			s.PeersManager(),

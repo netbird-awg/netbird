@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,18 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewDeviceAuthorizationFlowRequiresTLS12(t *testing.T) {
+	deviceFlow, err := NewDeviceAuthorizationFlow(DeviceAuthProviderConfig{})
+	require.NoError(t, err)
+
+	httpClient, ok := deviceFlow.HTTPClient.(*http.Client)
+	require.True(t, ok)
+	httpTransport, ok := httpClient.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.NotNil(t, httpTransport.TLSClientConfig)
+	require.Equal(t, uint16(tls.VersionTLS12), httpTransport.TLSClientConfig.MinVersion)
+}
 
 type mockHTTPClient struct {
 	code         int

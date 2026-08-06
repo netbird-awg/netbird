@@ -1,0 +1,57 @@
+# Organizational units
+dn: ou=users,dc=example,dc=org
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=example,dc=org
+objectClass: organizationalUnit
+ou: groups
+
+# Test user: ldapuser@example.org / LdapPass@123
+dn: uid=ldapuser,ou=users,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: ldapuser
+sn: User
+givenName: LDAP
+cn: LDAP User
+displayName: LDAP User
+uidNumber: 10000
+gidNumber: 10000
+userPassword: LdapPass@123
+homeDirectory: /home/ldapuser
+mail: ldapuser@example.org
+loginShell: /bin/bash
+
+# Test admin: ldapadmin@example.org / LdapAdmin@123
+dn: uid=ldapadmin,ou=users,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: ldapadmin
+sn: Admin
+givenName: LDAP
+cn: LDAP Admin
+displayName: LDAP Admin
+uidNumber: 10001
+gidNumber: 10000
+userPassword: LdapAdmin@123
+homeDirectory: /home/ldapadmin
+mail: ldapadmin@example.org
+loginShell: /bin/bash
+
+# Group
+dn: cn=netbird-users,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+cn: netbird-users
+member: uid=ldapuser,ou=users,dc=example,dc=org
+member: uid=ldapadmin,ou=users,dc=example,dc=org
+
+# Default synchronization scope. This is intentionally separate from the
+# netbird-users login restriction group.
+dn: cn=netbird,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+cn: netbird
+member: uid=ldapuser,ou=users,dc=example,dc=org
+member: uid=ldapadmin,ou=users,dc=example,dc=org

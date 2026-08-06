@@ -1,6 +1,11 @@
 .env
 .env.*
+.git
+.github
 *.pem
 *.key
 *.crt
 *.p12
+dashboard
+deploy/runtime
+deploy/backups

@@ -21,6 +21,9 @@ import (
 	"github.com/netbirdio/netbird/encryption"
 	nbconfig "github.com/netbirdio/netbird/management/internals/server/config"
 	"github.com/netbirdio/netbird/management/server/idp"
+	"github.com/netbirdio/netbird/management/server/localintegrations/eventstreaming"
+	"github.com/netbirdio/netbird/management/server/localintegrations/ldapsync"
+	localscim "github.com/netbirdio/netbird/management/server/localintegrations/scim"
 	"github.com/netbirdio/netbird/management/server/metrics"
 	"github.com/netbirdio/netbird/management/server/store"
 	"github.com/netbirdio/netbird/util/wsproxy"
@@ -180,6 +183,15 @@ func (s *BaseServer) Start(ctx context.Context) error {
 	// before we iterate them. Lazy creation after the loop would miss hooks
 	// registered during GRPCServer() construction (e.g., SetServiceManager).
 	s.GRPCServer()
+	if ldapsync.SyncEnabled() {
+		s.LocalLDAPSyncService().Start(srvCtx)
+	}
+	if localscim.Enabled() {
+		s.LocalSCIMService().Start(srvCtx)
+	}
+	if eventstreaming.Enabled() {
+		s.LocalEventStreamingService().Start(srvCtx)
+	}
 
 	for _, fn := range s.afterInit {
 		if fn != nil {

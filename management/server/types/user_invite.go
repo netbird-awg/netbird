@@ -42,6 +42,9 @@ type UserInviteRecord struct {
 	ExpiresAt   time.Time `gorm:"not null"`
 	CreatedAt   time.Time `gorm:"not null"`
 	CreatedBy   string    `gorm:"not null"`
+	// IdpID is the identity provider connector ID for external pre-registration (e.g. LDAP).
+	// When set, the invite is a pre-registration that auto-approves the user on first login.
+	IdpID string `gorm:"column:idp_id;default:''"`
 }
 
 // TableName returns the table name for GORM
@@ -197,5 +200,6 @@ func (i *UserInviteRecord) Copy() *UserInviteRecord {
 		ExpiresAt:   i.ExpiresAt,
 		CreatedAt:   i.CreatedAt,
 		CreatedBy:   i.CreatedBy,
+		IdpID:       i.IdpID,
 	}
 }

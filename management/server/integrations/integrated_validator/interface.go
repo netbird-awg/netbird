@@ -21,3 +21,16 @@ type IntegratedValidator interface {
 	Stop(ctx context.Context)
 	ValidateFlowResponse(ctx context.Context, peerKey string, flowResponse *proto.PKCEAuthorizationFlow) *proto.PKCEAuthorizationFlow
 }
+
+// PeerValidationResultsProvider lets validators calculate the valid and
+// invalid peer sets from the same account snapshot. Implementations that do
+// not support it continue to use the two legacy methods above.
+type PeerValidationResultsProvider interface {
+	GetPeerValidationResults(
+		ctx context.Context,
+		accountID string,
+		groups []*types.Group,
+		peers []*nbpeer.Peer,
+		extraSettings *types.ExtraSettings,
+	) (map[string]struct{}, map[string]string, error)
+}

@@ -1,16 +1,17 @@
 package idp
 
 import (
+	"crypto/rand"
 	"encoding/json"
-	"math/rand"
+	"fmt"
+	"math/big"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 )
 
 var (
-	lowerCharSet   = "abcdedfghijklmnopqrst"
+	lowerCharSet   = "abcdefghijklmnopqrstuvwxyz"
 	upperCharSet   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	specialCharSet = "!@#$%&*"
 	numberSet      = "0123456789"
@@ -27,38 +28,61 @@ func (JsonParser) Unmarshal(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
 }
 
-// GeneratePassword generates user password
-func GeneratePassword(passwordLength, minSpecialChar, minNum, minUpperCase int) string {
-	var password strings.Builder
-
-	//Set special character
-	for i := 0; i < minSpecialChar; i++ {
-		random := rand.Intn(len(specialCharSet))
-		password.WriteString(string(specialCharSet[random]))
+// GeneratePassword generates a password using the operating system's
+// cryptographically secure random source.
+func GeneratePassword(passwordLength, minSpecialChar, minNum, minUpperCase int) (string, error) {
+	if passwordLength <= 0 || minSpecialChar < 0 || minNum < 0 || minUpperCase < 0 {
+		return "", fmt.Errorf("invalid password length requirements")
+	}
+	if minSpecialChar+minNum+minUpperCase > passwordLength {
+		return "", fmt.Errorf("minimum character requirements exceed password length")
 	}
 
-	//Set numeric
-	for i := 0; i < minNum; i++ {
-		random := rand.Intn(len(numberSet))
-		password.WriteString(string(numberSet[random]))
+	password := make([]byte, 0, passwordLength)
+	appendRandom := func(charSet string, count int) error {
+		for range count {
+			index, err := secureRandomIndex(len(charSet))
+			if err != nil {
+				return err
+			}
+			password = append(password, charSet[index])
+		}
+		return nil
 	}
 
-	//Set uppercase
-	for i := 0; i < minUpperCase; i++ {
-		random := rand.Intn(len(upperCharSet))
-		password.WriteString(string(upperCharSet[random]))
+	if err := appendRandom(specialCharSet, minSpecialChar); err != nil {
+		return "", err
+	}
+	if err := appendRandom(numberSet, minNum); err != nil {
+		return "", err
+	}
+	if err := appendRandom(upperCharSet, minUpperCase); err != nil {
+		return "", err
+	}
+	if err := appendRandom(allCharSet, passwordLength-len(password)); err != nil {
+		return "", err
 	}
 
-	remainingLength := passwordLength - minSpecialChar - minNum - minUpperCase
-	for i := 0; i < remainingLength; i++ {
-		random := rand.Intn(len(allCharSet))
-		password.WriteString(string(allCharSet[random]))
+	for i := len(password) - 1; i > 0; i-- {
+		j, err := secureRandomIndex(i + 1)
+		if err != nil {
+			return "", err
+		}
+		password[i], password[j] = password[j], password[i]
 	}
-	inRune := []rune(password.String())
-	rand.Shuffle(len(inRune), func(i, j int) {
-		inRune[i], inRune[j] = inRune[j], inRune[i]
-	})
-	return string(inRune)
+
+	return string(password), nil
+}
+
+func secureRandomIndex(limit int) (int, error) {
+	if limit <= 0 {
+		return 0, fmt.Errorf("random selection requires a non-empty character set")
+	}
+	value, err := rand.Int(rand.Reader, big.NewInt(int64(limit)))
+	if err != nil {
+		return 0, fmt.Errorf("generate secure random value: %w", err)
+	}
+	return int(value.Int64()), nil
 }
 
 // baseURL returns the base url  by concatenating

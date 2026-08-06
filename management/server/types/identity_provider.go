@@ -41,6 +41,8 @@ const (
 	IdentityProviderTypeKeycloak IdentityProviderType = "keycloak"
 	// IdentityProviderTypeADFS is the Microsoft AD FS identity provider
 	IdentityProviderTypeADFS IdentityProviderType = "adfs"
+	// IdentityProviderTypeLDAP is the LDAP identity provider
+	IdentityProviderTypeLDAP IdentityProviderType = "ldap"
 )
 
 // IdentityProvider represents an identity provider configuration
@@ -59,19 +61,25 @@ type IdentityProvider struct {
 	ClientID string
 	// ClientSecret is the OAuth2 client secret
 	ClientSecret string
+
+	// IdentityProviderLDAP is embedded to keep the database column names and
+	// existing field selectors stable while isolating local LDAP extensions.
+	IdentityProviderLDAP `gorm:"embedded"`
 }
 
 // Copy returns a copy of the IdentityProvider
 func (idp *IdentityProvider) Copy() *IdentityProvider {
-	return &IdentityProvider{
-		ID:           idp.ID,
-		AccountID:    idp.AccountID,
-		Type:         idp.Type,
-		Name:         idp.Name,
-		Issuer:       idp.Issuer,
-		ClientID:     idp.ClientID,
-		ClientSecret: idp.ClientSecret,
+	c := &IdentityProvider{
+		ID:                   idp.ID,
+		AccountID:            idp.AccountID,
+		Type:                 idp.Type,
+		Name:                 idp.Name,
+		Issuer:               idp.Issuer,
+		ClientID:             idp.ClientID,
+		ClientSecret:         idp.ClientSecret,
+		IdentityProviderLDAP: idp.IdentityProviderLDAP,
 	}
+	return c
 }
 
 // EventMeta returns a map of metadata for activity events
@@ -94,6 +102,11 @@ func (idp *IdentityProvider) Validate() error {
 	if !idp.Type.IsValid() {
 		return ErrIdentityProviderTypeUnsupported
 	}
+
+	if idp.Type == IdentityProviderTypeLDAP {
+		return idp.validateLDAP()
+	}
+
 	if !idp.Type.HasBuiltInIssuer() && idp.Issuer == "" {
 		return ErrIdentityProviderIssuerRequired
 	}
@@ -115,7 +128,7 @@ func (t IdentityProviderType) IsValid() bool {
 	case IdentityProviderTypeOIDC, IdentityProviderTypeZitadel, IdentityProviderTypeEntra,
 		IdentityProviderTypeGoogle, IdentityProviderTypeOkta, IdentityProviderTypePocketID,
 		IdentityProviderTypeMicrosoft, IdentityProviderTypeAuthentik, IdentityProviderTypeKeycloak,
-		IdentityProviderTypeADFS:
+		IdentityProviderTypeADFS, IdentityProviderTypeLDAP:
 		return true
 	}
 	return false
@@ -123,5 +136,5 @@ func (t IdentityProviderType) IsValid() bool {
 
 // HasBuiltInIssuer returns true for types that don't require an issuer URL
 func (t IdentityProviderType) HasBuiltInIssuer() bool {
-	return t == IdentityProviderTypeGoogle || t == IdentityProviderTypeMicrosoft
+	return t == IdentityProviderTypeGoogle || t == IdentityProviderTypeMicrosoft || t == IdentityProviderTypeLDAP
 }

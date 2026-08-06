@@ -13,6 +13,29 @@ import (
 	"github.com/netbirdio/netbird/management/server/types"
 )
 
+func TestEnsureAccountTunnelPolicyTimestamps(t *testing.T) {
+	accountCreatedAt := time.Date(2026, time.August, 7, 1, 2, 3, 0, time.UTC)
+	userCreatedAt := accountCreatedAt.Add(time.Minute)
+	account := &types.Account{
+		CreatedAt: accountCreatedAt,
+		Settings:  &types.Settings{},
+		Users: map[string]*types.User{
+			"user": {
+				CreatedAt: userCreatedAt,
+			},
+		},
+	}
+
+	ensureAccountTunnelPolicyTimestamps(account)
+
+	require.Equal(t, accountCreatedAt, account.Settings.TunnelPolicyUpdatedAt)
+	require.Equal(
+		t,
+		userCreatedAt,
+		account.Users["user"].TunnelPolicyUpdatedAt,
+	)
+}
+
 func TestTunnelStateRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	sqlStore, cleanup, err := NewTestStoreFromSQL(ctx, "", t.TempDir())

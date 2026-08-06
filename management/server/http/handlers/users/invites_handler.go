@@ -36,6 +36,10 @@ func toUserInviteResponse(invite *types.UserInvite) api.UserInvite {
 	if invite.InviteToken != "" {
 		inviteLink = &invite.InviteToken
 	}
+	var idpID *string
+	if invite.UserInfo.IdPID != "" {
+		idpID = &invite.UserInfo.IdPID
+	}
 	return api.UserInvite{
 		Id:          invite.UserInfo.ID,
 		Email:       invite.UserInfo.Email,
@@ -46,6 +50,7 @@ func toUserInviteResponse(invite *types.UserInvite) api.UserInvite {
 		CreatedAt:   invite.InviteCreatedAt.UTC(),
 		Expired:     time.Now().After(invite.InviteExpiresAt),
 		InviteToken: inviteLink,
+		IdpId:       idpID,
 	}
 }
 
@@ -111,7 +116,7 @@ func (h *invitesHandler) createInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req api.UserInviteCreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSONBody(w, r, &req); err != nil {
 		util.WriteErrorResponse("couldn't parse JSON request", http.StatusBadRequest, w)
 		return
 	}
@@ -121,6 +126,18 @@ func (h *invitesHandler) createInvite(w http.ResponseWriter, r *http.Request) {
 		Name:       req.Name,
 		Role:       req.Role,
 		AutoGroups: req.AutoGroups,
+	}
+	if req.IdpId != nil {
+		invite.IdPID = *req.IdpId
+	}
+	if req.Password != nil {
+		invite.Password = *req.Password
+	}
+	if len(req.LdapGroups) > 0 {
+		invite.LdapGroups = req.LdapGroups
+	}
+	if req.ForcePasswordChange != nil && *req.ForcePasswordChange {
+		invite.ForcePasswordChange = true
 	}
 
 	expiresIn := 0
@@ -176,7 +193,7 @@ func (h *invitesHandler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req api.UserInviteAcceptRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSONBody(w, r, &req); err != nil {
 		util.WriteErrorResponse("couldn't parse JSON request", http.StatusBadRequest, w)
 		return
 	}

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dexidp/dex/storage"
@@ -182,6 +183,18 @@ func TestEncodeDexUserID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, userID, decodedUserID)
 	assert.Equal(t, connectorID, decodedConnID)
+}
+
+func TestEncodeDexUserIDSupportsMultiByteProtobufLengths(t *testing.T) {
+	userID := strings.Repeat("u", 300)
+	connectorID := strings.Repeat("c", 140)
+
+	encoded := EncodeDexUserID(userID, connectorID)
+	decodedUserID, decodedConnectorID, err := DecodeDexUserID(encoded)
+
+	require.NoError(t, err)
+	require.Equal(t, userID, decodedUserID)
+	require.Equal(t, connectorID, decodedConnectorID)
 }
 
 func TestEncodeDexUserID_MatchesDexFormat(t *testing.T) {

@@ -2,12 +2,19 @@ package telemetry
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestHistogramMeanRejectsOverflowingCount(t *testing.T) {
+	assert.Equal(t, int64(5), histogramMean(10, 2))
+	assert.Equal(t, int64(0), histogramMean(math.MaxInt64, uint64(math.MaxInt64)+1))
+	assert.Equal(t, int64(0), histogramMean(10, 0))
+}
 
 func TestDeltaTemporality_P95ReflectsCurrentWindow(t *testing.T) {
 	// Verify that with delta temporality, each flush window only reflects

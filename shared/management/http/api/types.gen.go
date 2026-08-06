@@ -574,6 +574,7 @@ const (
 	IdentityProviderTypeAdfs      IdentityProviderType = "adfs"
 	IdentityProviderTypeEntra     IdentityProviderType = "entra"
 	IdentityProviderTypeGoogle    IdentityProviderType = "google"
+	IdentityProviderTypeLdap      IdentityProviderType = "ldap"
 	IdentityProviderTypeMicrosoft IdentityProviderType = "microsoft"
 	IdentityProviderTypeOidc      IdentityProviderType = "oidc"
 	IdentityProviderTypeOkta      IdentityProviderType = "okta"
@@ -589,6 +590,8 @@ func (e IdentityProviderType) Valid() bool {
 	case IdentityProviderTypeEntra:
 		return true
 	case IdentityProviderTypeGoogle:
+		return true
+	case IdentityProviderTypeLdap:
 		return true
 	case IdentityProviderTypeMicrosoft:
 		return true
@@ -725,6 +728,192 @@ func (e JobResponseStatus) Valid() bool {
 	case JobResponseStatusPending:
 		return true
 	case JobResponseStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LDAPConnectorTestResponseChecks.
+const (
+	LDAPConnectorTestResponseChecksFailed  LDAPConnectorTestResponseChecks = "failed"
+	LDAPConnectorTestResponseChecksOk      LDAPConnectorTestResponseChecks = "ok"
+	LDAPConnectorTestResponseChecksPending LDAPConnectorTestResponseChecks = "pending"
+	LDAPConnectorTestResponseChecksSkipped LDAPConnectorTestResponseChecks = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the LDAPConnectorTestResponseChecks enum.
+func (e LDAPConnectorTestResponseChecks) Valid() bool {
+	switch e {
+	case LDAPConnectorTestResponseChecksFailed:
+		return true
+	case LDAPConnectorTestResponseChecksOk:
+		return true
+	case LDAPConnectorTestResponseChecksPending:
+		return true
+	case LDAPConnectorTestResponseChecksSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LDAPConnectorTestResponseStatus.
+const (
+	LDAPConnectorTestResponseStatusOk LDAPConnectorTestResponseStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the LDAPConnectorTestResponseStatus enum.
+func (e LDAPConnectorTestResponseStatus) Valid() bool {
+	switch e {
+	case LDAPConnectorTestResponseStatusOk:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LocalLDAPSyncConfigConflictPolicy.
+const (
+	LocalLDAPSyncConfigConflictPolicySkip LocalLDAPSyncConfigConflictPolicy = "skip"
+)
+
+// Valid indicates whether the value is a known member of the LocalLDAPSyncConfigConflictPolicy enum.
+func (e LocalLDAPSyncConfigConflictPolicy) Valid() bool {
+	switch e {
+	case LocalLDAPSyncConfigConflictPolicySkip:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LocalLDAPSyncConfigDeprovisionAction.
+const (
+	LocalLDAPSyncConfigDeprovisionActionDisable LocalLDAPSyncConfigDeprovisionAction = "disable"
+	LocalLDAPSyncConfigDeprovisionActionIgnore  LocalLDAPSyncConfigDeprovisionAction = "ignore"
+)
+
+// Valid indicates whether the value is a known member of the LocalLDAPSyncConfigDeprovisionAction enum.
+func (e LocalLDAPSyncConfigDeprovisionAction) Valid() bool {
+	switch e {
+	case LocalLDAPSyncConfigDeprovisionActionDisable:
+		return true
+	case LocalLDAPSyncConfigDeprovisionActionIgnore:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LocalLDAPSyncConfigRequestConflictPolicy.
+const (
+	LocalLDAPSyncConfigRequestConflictPolicySkip LocalLDAPSyncConfigRequestConflictPolicy = "skip"
+)
+
+// Valid indicates whether the value is a known member of the LocalLDAPSyncConfigRequestConflictPolicy enum.
+func (e LocalLDAPSyncConfigRequestConflictPolicy) Valid() bool {
+	switch e {
+	case LocalLDAPSyncConfigRequestConflictPolicySkip:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LocalLDAPSyncConfigRequestDeprovisionAction.
+const (
+	LocalLDAPSyncConfigRequestDeprovisionActionDisable LocalLDAPSyncConfigRequestDeprovisionAction = "disable"
+	LocalLDAPSyncConfigRequestDeprovisionActionIgnore  LocalLDAPSyncConfigRequestDeprovisionAction = "ignore"
+)
+
+// Valid indicates whether the value is a known member of the LocalLDAPSyncConfigRequestDeprovisionAction enum.
+func (e LocalLDAPSyncConfigRequestDeprovisionAction) Valid() bool {
+	switch e {
+	case LocalLDAPSyncConfigRequestDeprovisionActionDisable:
+		return true
+	case LocalLDAPSyncConfigRequestDeprovisionActionIgnore:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LocalLDAPSyncPreviewSampleAction.
+const (
+	LocalLDAPSyncPreviewSampleActionConflict LocalLDAPSyncPreviewSampleAction = "conflict"
+	LocalLDAPSyncPreviewSampleActionCreate   LocalLDAPSyncPreviewSampleAction = "create"
+	LocalLDAPSyncPreviewSampleActionDisable  LocalLDAPSyncPreviewSampleAction = "disable"
+	LocalLDAPSyncPreviewSampleActionSkipped  LocalLDAPSyncPreviewSampleAction = "skipped"
+	LocalLDAPSyncPreviewSampleActionUpdate   LocalLDAPSyncPreviewSampleAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the LocalLDAPSyncPreviewSampleAction enum.
+func (e LocalLDAPSyncPreviewSampleAction) Valid() bool {
+	switch e {
+	case LocalLDAPSyncPreviewSampleActionConflict:
+		return true
+	case LocalLDAPSyncPreviewSampleActionCreate:
+		return true
+	case LocalLDAPSyncPreviewSampleActionDisable:
+		return true
+	case LocalLDAPSyncPreviewSampleActionSkipped:
+		return true
+	case LocalLDAPSyncPreviewSampleActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LocalLDAPSyncRunStatus.
+const (
+	LocalLDAPSyncRunStatusAwaitingApproval LocalLDAPSyncRunStatus = "awaiting_approval"
+	LocalLDAPSyncRunStatusCancelled        LocalLDAPSyncRunStatus = "cancelled"
+	LocalLDAPSyncRunStatusFailed           LocalLDAPSyncRunStatus = "failed"
+	LocalLDAPSyncRunStatusPartial          LocalLDAPSyncRunStatus = "partial"
+	LocalLDAPSyncRunStatusQueued           LocalLDAPSyncRunStatus = "queued"
+	LocalLDAPSyncRunStatusRunning          LocalLDAPSyncRunStatus = "running"
+	LocalLDAPSyncRunStatusSuccess          LocalLDAPSyncRunStatus = "success"
+)
+
+// Valid indicates whether the value is a known member of the LocalLDAPSyncRunStatus enum.
+func (e LocalLDAPSyncRunStatus) Valid() bool {
+	switch e {
+	case LocalLDAPSyncRunStatusAwaitingApproval:
+		return true
+	case LocalLDAPSyncRunStatusCancelled:
+		return true
+	case LocalLDAPSyncRunStatusFailed:
+		return true
+	case LocalLDAPSyncRunStatusPartial:
+		return true
+	case LocalLDAPSyncRunStatusQueued:
+		return true
+	case LocalLDAPSyncRunStatusRunning:
+		return true
+	case LocalLDAPSyncRunStatusSuccess:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LocalLDAPSyncRunTrigger.
+const (
+	LocalLDAPSyncRunTriggerInitial   LocalLDAPSyncRunTrigger = "initial"
+	LocalLDAPSyncRunTriggerManual    LocalLDAPSyncRunTrigger = "manual"
+	LocalLDAPSyncRunTriggerScheduled LocalLDAPSyncRunTrigger = "scheduled"
+)
+
+// Valid indicates whether the value is a known member of the LocalLDAPSyncRunTrigger enum.
+func (e LocalLDAPSyncRunTrigger) Valid() bool {
+	switch e {
+	case LocalLDAPSyncRunTriggerInitial:
+		return true
+	case LocalLDAPSyncRunTriggerManual:
+		return true
+	case LocalLDAPSyncRunTriggerScheduled:
 		return true
 	default:
 		return false
@@ -1202,6 +1391,27 @@ func (e TunnelProfileProtocolVersion) Valid() bool {
 	}
 }
 
+// Defines values for UserMfaPolicy.
+const (
+	UserMfaPolicyDisabled UserMfaPolicy = "disabled"
+	UserMfaPolicyInherit  UserMfaPolicy = "inherit"
+	UserMfaPolicyRequired UserMfaPolicy = "required"
+)
+
+// Valid indicates whether the value is a known member of the UserMfaPolicy enum.
+func (e UserMfaPolicy) Valid() bool {
+	switch e {
+	case UserMfaPolicyDisabled:
+		return true
+	case UserMfaPolicyInherit:
+		return true
+	case UserMfaPolicyRequired:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserStatus.
 const (
 	UserStatusActive  UserStatus = "active"
@@ -1238,6 +1448,27 @@ func (e UserTunnelPolicy) Valid() bool {
 	case UserTunnelPolicyPreferAwg:
 		return true
 	case UserTunnelPolicyStandardOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserRequestMfaPolicy.
+const (
+	UserRequestMfaPolicyDisabled UserRequestMfaPolicy = "disabled"
+	UserRequestMfaPolicyInherit  UserRequestMfaPolicy = "inherit"
+	UserRequestMfaPolicyRequired UserRequestMfaPolicy = "required"
+)
+
+// Valid indicates whether the value is a known member of the UserRequestMfaPolicy enum.
+func (e UserRequestMfaPolicy) Valid() bool {
+	switch e {
+	case UserRequestMfaPolicyDisabled:
+		return true
+	case UserRequestMfaPolicyInherit:
+		return true
+	case UserRequestMfaPolicyRequired:
 		return true
 	default:
 		return false
@@ -2871,7 +3102,7 @@ type DNSSettings struct {
 	DisabledManagementGroups []string `json:"disabled_management_groups"`
 }
 
-// EDRFalconRequest Request payload for creating or updating a EDR Falcon integration
+// EDRFalconRequest Request payload for creating an EDR Falcon integration
 type EDRFalconRequest struct {
 	// ClientId CrowdStrike API client ID
 	ClientId string `json:"client_id"`
@@ -2915,8 +3146,11 @@ type EDRFalconResponse struct {
 	// Id The unique numeric identifier for the integration.
 	Id int64 `json:"id"`
 
+	// LastError Most recent synchronization error, omitted after a successful sync.
+	LastError *string `json:"last_error,omitempty"`
+
 	// LastSyncedAt Timestamp of when the integration was last synced.
-	LastSyncedAt time.Time `json:"last_synced_at"`
+	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
 
 	// UpdatedAt Timestamp of when the integration was last updated.
 	UpdatedAt time.Time `json:"updated_at"`
@@ -2925,7 +3159,17 @@ type EDRFalconResponse struct {
 	ZtaScoreThreshold int `json:"zta_score_threshold"`
 }
 
-// EDRFleetDMRequest Request payload for creating or updating a FleetDM EDR integration
+// EDRFalconUpdateRequest Request payload for updating an EDR Falcon integration. Omit client_id and secret to preserve their stored values.
+type EDRFalconUpdateRequest struct {
+	ClientId          *string  `json:"client_id,omitempty"`
+	CloudId           string   `json:"cloud_id"`
+	Enabled           *bool    `json:"enabled,omitempty"`
+	Groups            []string `json:"groups"`
+	Secret            *string  `json:"secret,omitempty"`
+	ZtaScoreThreshold int      `json:"zta_score_threshold"`
+}
+
+// EDRFleetDMRequest Request payload for creating a FleetDM EDR integration
 type EDRFleetDMRequest struct {
 	// ApiToken FleetDM API token
 	ApiToken string `json:"api_token"`
@@ -2969,8 +3213,11 @@ type EDRFleetDMResponse struct {
 	// Id The unique numeric identifier for the integration.
 	Id int64 `json:"id"`
 
+	// LastError Most recent synchronization error, omitted after a successful sync.
+	LastError *string `json:"last_error,omitempty"`
+
 	// LastSyncedAt Timestamp of when the integration was last synced.
-	LastSyncedAt time.Time `json:"last_synced_at"`
+	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
 
 	// LastSyncedInterval The devices last sync requirement interval in hours.
 	LastSyncedInterval int `json:"last_synced_interval"`
@@ -2982,7 +3229,19 @@ type EDRFleetDMResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// EDRHuntressRequest Request payload for creating or updating a EDR Huntress integration
+// EDRFleetDMUpdateRequest Request payload for updating a FleetDM EDR integration. Omit api_token to preserve the stored value.
+type EDRFleetDMUpdateRequest struct {
+	ApiToken           *string  `json:"api_token,omitempty"`
+	ApiUrl             string   `json:"api_url"`
+	Enabled            *bool    `json:"enabled,omitempty"`
+	Groups             []string `json:"groups"`
+	LastSyncedInterval int      `json:"last_synced_interval"`
+
+	// MatchAttributes Attribute conditions to match when approving FleetDM hosts. Most attributes work with FleetDM's free/open-source version. Premium-only attributes are marked accordingly
+	MatchAttributes FleetDMMatchAttributes `json:"match_attributes"`
+}
+
+// EDRHuntressRequest Request payload for creating an EDR Huntress integration
 type EDRHuntressRequest struct {
 	// ApiKey Huntress API key
 	ApiKey string `json:"api_key"`
@@ -3023,8 +3282,11 @@ type EDRHuntressResponse struct {
 	// Id The unique numeric identifier for the integration.
 	Id int64 `json:"id"`
 
+	// LastError Most recent synchronization error, omitted after a successful sync.
+	LastError *string `json:"last_error,omitempty"`
+
 	// LastSyncedAt Timestamp of when the integration was last synced.
-	LastSyncedAt time.Time `json:"last_synced_at"`
+	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
 
 	// LastSyncedInterval The devices last sync requirement interval in hours.
 	LastSyncedInterval int `json:"last_synced_interval"`
@@ -3036,7 +3298,19 @@ type EDRHuntressResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// EDRIntuneRequest Request payload for creating or updating a EDR Intune integration.
+// EDRHuntressUpdateRequest Request payload for updating an EDR Huntress integration. Omit api_key and api_secret to preserve stored values.
+type EDRHuntressUpdateRequest struct {
+	ApiKey             *string  `json:"api_key,omitempty"`
+	ApiSecret          *string  `json:"api_secret,omitempty"`
+	Enabled            *bool    `json:"enabled,omitempty"`
+	Groups             []string `json:"groups"`
+	LastSyncedInterval int      `json:"last_synced_interval"`
+
+	// MatchAttributes Attribute conditions to match when approving agents
+	MatchAttributes HuntressMatchAttributes `json:"match_attributes"`
+}
+
+// EDRIntuneRequest Request payload for creating an EDR Intune integration.
 type EDRIntuneRequest struct {
 	// ClientId The Azure application client id
 	ClientId string `json:"client_id"`
@@ -3080,8 +3354,11 @@ type EDRIntuneResponse struct {
 	// Id The unique numeric identifier for the integration.
 	Id int64 `json:"id"`
 
+	// LastError Most recent synchronization error, omitted after a successful sync.
+	LastError *string `json:"last_error,omitempty"`
+
 	// LastSyncedAt Timestamp of when the integration was last synced.
-	LastSyncedAt time.Time `json:"last_synced_at"`
+	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
 
 	// LastSyncedInterval The devices last sync requirement interval in hours.
 	LastSyncedInterval int `json:"last_synced_interval"`
@@ -3093,7 +3370,17 @@ type EDRIntuneResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// EDRSentinelOneRequest Request payload for creating or updating a EDR SentinelOne integration
+// EDRIntuneUpdateRequest Request payload for updating an EDR Intune integration. Omit secret to preserve the stored value.
+type EDRIntuneUpdateRequest struct {
+	ClientId           string   `json:"client_id"`
+	Enabled            *bool    `json:"enabled,omitempty"`
+	Groups             []string `json:"groups"`
+	LastSyncedInterval int      `json:"last_synced_interval"`
+	Secret             *string  `json:"secret,omitempty"`
+	TenantId           string   `json:"tenant_id"`
+}
+
+// EDRSentinelOneRequest Request payload for creating an EDR SentinelOne integration
 type EDRSentinelOneRequest struct {
 	// ApiToken SentinelOne API token
 	ApiToken string `json:"api_token"`
@@ -3137,8 +3424,11 @@ type EDRSentinelOneResponse struct {
 	// Id The unique numeric identifier for the integration.
 	Id int64 `json:"id"`
 
+	// LastError Most recent synchronization error, omitted after a successful sync.
+	LastError *string `json:"last_error,omitempty"`
+
 	// LastSyncedAt Timestamp of when the integration was last synced.
-	LastSyncedAt time.Time `json:"last_synced_at"`
+	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
 
 	// LastSyncedInterval The devices last sync requirement interval in hours.
 	LastSyncedInterval int `json:"last_synced_interval"`
@@ -3148,6 +3438,18 @@ type EDRSentinelOneResponse struct {
 
 	// UpdatedAt Timestamp of when the integration was last updated.
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// EDRSentinelOneUpdateRequest Request payload for updating an EDR SentinelOne integration. Omit api_token to preserve the stored value.
+type EDRSentinelOneUpdateRequest struct {
+	ApiToken           *string  `json:"api_token,omitempty"`
+	ApiUrl             string   `json:"api_url"`
+	Enabled            *bool    `json:"enabled,omitempty"`
+	Groups             []string `json:"groups"`
+	LastSyncedInterval int      `json:"last_synced_interval"`
+
+	// MatchAttributes Attribute conditions to match when approving agents
+	MatchAttributes SentinelOneMatchAttributes `json:"match_attributes"`
 }
 
 // EmailTarget Target configuration for email notification channels.
@@ -3349,11 +3651,77 @@ type IdentityProvider struct {
 	// Issuer OIDC issuer URL
 	Issuer string `json:"issuer"`
 
+	// Ldap LDAP connector configuration for an identity provider.
+	Ldap *IdentityProviderLDAP `json:"ldap,omitempty"`
+
 	// Name Human-readable name for the identity provider
 	Name string `json:"name"`
 
+	// SecretConfigured Whether the connector has a stored client or LDAP bind secret. The secret value is never returned.
+	SecretConfigured bool `json:"secret_configured,omitempty"`
+
 	// Type Type of identity provider
 	Type IdentityProviderType `json:"type"`
+}
+
+// IdentityProviderLDAP LDAP connector configuration for an identity provider.
+type IdentityProviderLDAP struct {
+	// BindDN Distinguished name used to bind to the LDAP server.
+	BindDN string `json:"bind_dn"`
+
+	// BindPW Password for the bind DN.
+	BindPW string `json:"bind_pw,omitempty"`
+
+	// GroupSearchBaseDN Base DN for group searches.
+	GroupSearchBaseDN string `json:"group_search_base_dn,omitempty"`
+
+	// GroupSearchFilter Optional LDAP filter applied to group searches.
+	GroupSearchFilter string `json:"group_search_filter,omitempty"`
+
+	// GroupSearchGroupAttr Group attribute that contains member references.
+	GroupSearchGroupAttr string `json:"group_search_group_attr,omitempty"`
+
+	// GroupSearchNameAttr Attribute used as the group name.
+	GroupSearchNameAttr string `json:"group_search_name_attr,omitempty"`
+
+	// GroupSearchUserAttr User attribute matched against group membership.
+	GroupSearchUserAttr string `json:"group_search_user_attr,omitempty"`
+
+	// Host LDAP server host and port, for example ldap.example.com:636.
+	Host string `json:"host"`
+
+	// InsecureNoSSL Connect over plaintext TCP. Intended only for explicitly trusted local development environments.
+	InsecureNoSSL bool `json:"insecure_no_ssl,omitempty"`
+
+	// InsecureSkipVerify Skip TLS certificate verification. This weakens transport security and should only be used temporarily for local development.
+	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty"`
+
+	// RequiredGroups Restrict login to users in at least one of these groups.
+	RequiredGroups []string `json:"required_groups,omitempty"`
+
+	// RootCA PEM-encoded root CA certificate used to verify the LDAP server certificate.
+	RootCA string `json:"root_ca,omitempty"`
+
+	// StartTLS Connect over TCP and upgrade the connection with StartTLS.
+	StartTLS bool `json:"start_tls,omitempty"`
+
+	// UserSearchBaseDN Base DN for user searches.
+	UserSearchBaseDN string `json:"user_search_base_dn"`
+
+	// UserSearchEmailAttr Attribute used as the user email address.
+	UserSearchEmailAttr string `json:"user_search_email_attr,omitempty"`
+
+	// UserSearchFilter Optional LDAP filter applied to user searches.
+	UserSearchFilter string `json:"user_search_filter,omitempty"`
+
+	// UserSearchIDAttr Attribute used as the stable user ID.
+	UserSearchIDAttr string `json:"user_search_id_attr,omitempty"`
+
+	// UserSearchNameAttr Attribute used as the display name.
+	UserSearchNameAttr string `json:"user_search_name_attr,omitempty"`
+
+	// UserSearchUsername Attribute used as the login username.
+	UserSearchUsername string `json:"user_search_username,omitempty"`
 }
 
 // IdentityProviderRequest defines model for IdentityProviderRequest.
@@ -3366,6 +3734,9 @@ type IdentityProviderRequest struct {
 
 	// Issuer OIDC issuer URL
 	Issuer string `json:"issuer"`
+
+	// Ldap LDAP connector configuration for an identity provider.
+	Ldap *IdentityProviderLDAP `json:"ldap,omitempty"`
 
 	// Name Human-readable name for the identity provider
 	Name string `json:"name"`
@@ -3634,10 +4005,160 @@ type JobResponse struct {
 // JobResponseStatus defines model for JobResponse.Status.
 type JobResponseStatus string
 
+// LDAPConnectorTestResponse defines model for LDAPConnectorTestResponse.
+type LDAPConnectorTestResponse struct {
+	Checks    map[string]LDAPConnectorTestResponseChecks `json:"checks"`
+	LatencyMs int64                                      `json:"latency_ms"`
+	Status    LDAPConnectorTestResponseStatus            `json:"status"`
+	TestedAt  time.Time                                  `json:"tested_at"`
+}
+
+// LDAPConnectorTestResponseChecks defines model for LDAPConnectorTestResponse.Checks.
+type LDAPConnectorTestResponseChecks string
+
+// LDAPConnectorTestResponseStatus defines model for LDAPConnectorTestResponse.Status.
+type LDAPConnectorTestResponseStatus string
+
 // LinkAuthConfig defines model for LinkAuthConfig.
 type LinkAuthConfig struct {
 	// Enabled Whether link auth is enabled
 	Enabled bool `json:"enabled"`
+}
+
+// LocalLDAPSyncConfig defines model for LocalLDAPSyncConfig.
+type LocalLDAPSyncConfig struct {
+	AccountId string `json:"account_id"`
+
+	// AllowWithoutDefaultScope Explicit high-risk acknowledgement when the netbird LDAP group is not in scope.
+	AllowWithoutDefaultScope *bool                                `json:"allow_without_default_scope,omitempty"`
+	ConflictPolicy           LocalLDAPSyncConfigConflictPolicy    `json:"conflict_policy"`
+	ConnectorId              string                               `json:"connector_id"`
+	CreatedAt                time.Time                            `json:"created_at"`
+	DeprovisionAction        LocalLDAPSyncConfigDeprovisionAction `json:"deprovision_action"`
+	Enabled                  bool                                 `json:"enabled"`
+	FailureCount             int                                  `json:"failure_count"`
+	GroupMappings            []LocalLDAPSyncGroupMapping          `json:"group_mappings"`
+	Id                       int64                                `json:"id"`
+	IntervalMinutes          int                                  `json:"interval_minutes"`
+	LastSuccessAt            *time.Time                           `json:"last_success_at,omitempty"`
+	NextRunAt                *time.Time                           `json:"next_run_at,omitempty"`
+	PausedReason             *string                              `json:"paused_reason,omitempty"`
+
+	// Revision Current revision. Use zero when creating the configuration.
+	Revision        int64     `json:"revision"`
+	SyncScopeGroups []string  `json:"sync_scope_groups"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// LocalLDAPSyncConfigConflictPolicy defines model for LocalLDAPSyncConfig.ConflictPolicy.
+type LocalLDAPSyncConfigConflictPolicy string
+
+// LocalLDAPSyncConfigDeprovisionAction defines model for LocalLDAPSyncConfig.DeprovisionAction.
+type LocalLDAPSyncConfigDeprovisionAction string
+
+// LocalLDAPSyncConfigRequest defines model for LocalLDAPSyncConfigRequest.
+type LocalLDAPSyncConfigRequest struct {
+	// AllowWithoutDefaultScope Explicit high-risk acknowledgement when the netbird LDAP group is not in scope.
+	AllowWithoutDefaultScope *bool                                       `json:"allow_without_default_scope,omitempty"`
+	ConflictPolicy           LocalLDAPSyncConfigRequestConflictPolicy    `json:"conflict_policy"`
+	DeprovisionAction        LocalLDAPSyncConfigRequestDeprovisionAction `json:"deprovision_action"`
+	Enabled                  bool                                        `json:"enabled"`
+	GroupMappings            []LocalLDAPSyncGroupMapping                 `json:"group_mappings"`
+	IntervalMinutes          int                                         `json:"interval_minutes"`
+
+	// Revision Current revision. Use zero when creating the configuration.
+	Revision        int64    `json:"revision"`
+	SyncScopeGroups []string `json:"sync_scope_groups"`
+}
+
+// LocalLDAPSyncConfigRequestConflictPolicy defines model for LocalLDAPSyncConfigRequest.ConflictPolicy.
+type LocalLDAPSyncConfigRequestConflictPolicy string
+
+// LocalLDAPSyncConfigRequestDeprovisionAction defines model for LocalLDAPSyncConfigRequest.DeprovisionAction.
+type LocalLDAPSyncConfigRequestDeprovisionAction string
+
+// LocalLDAPSyncGroupMapping defines model for LocalLDAPSyncGroupMapping.
+type LocalLDAPSyncGroupMapping struct {
+	LdapGroup           string   `json:"ldap_group"`
+	NetbirdAutoGroupIds []string `json:"netbird_auto_group_ids"`
+}
+
+// LocalLDAPSyncPreview defines model for LocalLDAPSyncPreview.
+type LocalLDAPSyncPreview struct {
+	ConfirmationExpiresAt *time.Time                   `json:"confirmation_expires_at,omitempty"`
+	ConfirmationToken     *string                      `json:"confirmation_token,omitempty"`
+	Counts                LocalLDAPSyncPreviewCounts   `json:"counts"`
+	HighRisk              bool                         `json:"high_risk"`
+	HighRiskReason        *string                      `json:"high_risk_reason,omitempty"`
+	Samples               []LocalLDAPSyncPreviewSample `json:"samples"`
+	SourceFingerprint     string                       `json:"source_fingerprint"`
+}
+
+// LocalLDAPSyncPreviewCounts defines model for LocalLDAPSyncPreviewCounts.
+type LocalLDAPSyncPreviewCounts struct {
+	Conflicts int `json:"conflicts"`
+	Created   int `json:"created"`
+	Disabled  int `json:"disabled"`
+	Skipped   int `json:"skipped"`
+	Unchanged int `json:"unchanged"`
+	Updated   int `json:"updated"`
+}
+
+// LocalLDAPSyncPreviewSample defines model for LocalLDAPSyncPreviewSample.
+type LocalLDAPSyncPreviewSample struct {
+	Action         LocalLDAPSyncPreviewSampleAction `json:"action"`
+	Email          *openapi_types.Email             `json:"email,omitempty"`
+	ExternalIdHash string                           `json:"external_id_hash"`
+	Name           *string                          `json:"name,omitempty"`
+	Reason         *string                          `json:"reason,omitempty"`
+}
+
+// LocalLDAPSyncPreviewSampleAction defines model for LocalLDAPSyncPreviewSample.Action.
+type LocalLDAPSyncPreviewSampleAction string
+
+// LocalLDAPSyncRun defines model for LocalLDAPSyncRun.
+type LocalLDAPSyncRun struct {
+	AccountId         string                  `json:"account_id"`
+	Attempt           int                     `json:"attempt"`
+	ConfigRevision    int64                   `json:"config_revision"`
+	ConflictCount     int                     `json:"conflict_count"`
+	ConnectorId       string                  `json:"connector_id"`
+	CreatedAt         time.Time               `json:"created_at"`
+	CreatedCount      int                     `json:"created_count"`
+	DisabledCount     int                     `json:"disabled_count"`
+	ErrorCode         *string                 `json:"error_code,omitempty"`
+	ErrorCount        int                     `json:"error_count"`
+	ErrorSummary      *string                 `json:"error_summary,omitempty"`
+	FinishedAt        *time.Time              `json:"finished_at,omitempty"`
+	Id                string                  `json:"id"`
+	InitiatedBy       *string                 `json:"initiated_by,omitempty"`
+	QueuedAt          time.Time               `json:"queued_at"`
+	SkippedCount      int                     `json:"skipped_count"`
+	SourceFingerprint *string                 `json:"source_fingerprint,omitempty"`
+	StartedAt         *time.Time              `json:"started_at,omitempty"`
+	Status            LocalLDAPSyncRunStatus  `json:"status"`
+	Trigger           LocalLDAPSyncRunTrigger `json:"trigger"`
+	UpdatedAt         time.Time               `json:"updated_at"`
+	UpdatedCount      int                     `json:"updated_count"`
+}
+
+// LocalLDAPSyncRunStatus defines model for LocalLDAPSyncRun.Status.
+type LocalLDAPSyncRunStatus string
+
+// LocalLDAPSyncRunTrigger defines model for LocalLDAPSyncRun.Trigger.
+type LocalLDAPSyncRunTrigger string
+
+// LocalLDAPSyncRunList defines model for LocalLDAPSyncRunList.
+type LocalLDAPSyncRunList struct {
+	Items  []LocalLDAPSyncRun `json:"items"`
+	Limit  int                `json:"limit"`
+	Offset int                `json:"offset"`
+	Total  int64              `json:"total"`
+}
+
+// LocalLDAPSyncRunRequest defines model for LocalLDAPSyncRunRequest.
+type LocalLDAPSyncRunRequest struct {
+	ConfirmationToken *string `json:"confirmation_token,omitempty"`
 }
 
 // Location Describe geographical location information
@@ -5675,6 +6196,9 @@ type User struct {
 	// Email User's email address
 	Email string `json:"email"`
 
+	// ForcePasswordChange Is true if this user must change their password before accessing the system.
+	ForcePasswordChange bool `json:"force_password_change"`
+
 	// Id User ID
 	Id string `json:"id"`
 
@@ -5696,6 +6220,9 @@ type User struct {
 	// LastLogin Last time this user performed a login to the dashboard
 	LastLogin *time.Time `json:"last_login,omitempty"`
 
+	// MfaPolicy Controls native embedded IdP MFA for this user. Inherit uses the account default for local users; required and disabled override it.
+	MfaPolicy UserMfaPolicy `json:"mfa_policy"`
+
 	// Name User's name from idp provider
 	Name string `json:"name"`
 
@@ -5716,6 +6243,9 @@ type User struct {
 	TunnelPolicy *UserTunnelPolicy `json:"tunnel_policy,omitempty"`
 }
 
+// UserMfaPolicy Controls native embedded IdP MFA for this user. Inherit uses the account default for local users; required and disabled override it.
+type UserMfaPolicy string
+
 // UserStatus User's status
 type UserStatus string
 
@@ -5729,6 +6259,9 @@ type UserCreateRequest struct {
 
 	// Email User's Email to send invite to
 	Email *string `json:"email,omitempty"`
+
+	// IdpId Identity provider connector ID for external authentication (for example, LDAP). When set, the user is pre-registered for external IdP login.
+	IdpId *string `json:"idp_id,omitempty"`
 
 	// IsServiceUser Is true if this user is a service user
 	IsServiceUser bool `json:"is_service_user"`
@@ -5759,6 +6292,9 @@ type UserInvite struct {
 
 	// Id Invite ID
 	Id string `json:"id"`
+
+	// IdpId Identity provider connector ID for an external IdP pre-registration.
+	IdpId *string `json:"idp_id,omitempty"`
 
 	// InviteToken The invite link to be shared with the user. Only returned when the invite is created or regenerated.
 	InviteToken *string `json:"invite_token,omitempty"`
@@ -5793,8 +6329,20 @@ type UserInviteCreateRequest struct {
 	// ExpiresIn Invite expiration time in seconds (default 72 hours)
 	ExpiresIn *int `json:"expires_in,omitempty"`
 
+	// ForcePasswordChange Require the user to change their password on first login.
+	ForcePasswordChange *bool `json:"force_password_change,omitempty"`
+
+	// IdpId Identity provider connector ID. When set, the user is created in the external identity provider and pre-registered for auto-approval.
+	IdpId *string `json:"idp_id,omitempty"`
+
+	// LdapGroups Additional LDAP group names to add the user to. The mandatory netbird group is always included, and missing groups are created when supported by the connector.
+	LdapGroups []string `json:"ldap_groups,omitempty"`
+
 	// Name User's full name
 	Name string `json:"name"`
+
+	// Password User password. Required when idp_id is set for an external identity provider that supports user creation.
+	Password *string `json:"password,omitempty"`
 
 	// Role User's NetBird account role
 	Role string `json:"role"`
@@ -5848,12 +6396,18 @@ type UserRequest struct {
 	// IsBlocked If set to true then user is blocked and can't use the system
 	IsBlocked bool `json:"is_blocked"`
 
+	// MfaPolicy Controls native embedded IdP MFA for this user. Omit to keep the current policy.
+	MfaPolicy *UserRequestMfaPolicy `json:"mfa_policy,omitempty"`
+
 	// Role User's NetBird account role
 	Role string `json:"role"`
 
 	// TunnelPolicy User-level override for automatic tunnel selection.
 	TunnelPolicy *UserRequestTunnelPolicy `json:"tunnel_policy,omitempty"`
 }
+
+// UserRequestMfaPolicy Controls native embedded IdP MFA for this user. Omit to keep the current policy.
+type UserRequestMfaPolicy string
 
 // UserRequestTunnelPolicy User-level override for automatic tunnel selection.
 type UserRequestTunnelPolicy string
@@ -5926,6 +6480,15 @@ type ZoneRequest struct {
 
 // Conflict Standard error response. Note: The exact structure of this error response is inferred from `util.WriteErrorResponse` and `util.WriteError` usage in the provided Go code, as a specific Go struct for errors was not provided.
 type Conflict = ErrorResponse
+
+// PreconditionFailed Standard error response. Note: The exact structure of this error response is inferred from `util.WriteErrorResponse` and `util.WriteError` usage in the provided Go code, as a specific Go struct for errors was not provided.
+type PreconditionFailed = ErrorResponse
+
+// TooManyRequests Standard error response. Note: The exact structure of this error response is inferred from `util.WriteErrorResponse` and `util.WriteError` usage in the provided Go code, as a specific Go struct for errors was not provided.
+type TooManyRequests = ErrorResponse
+
+// UnprocessableEntity Standard error response. Note: The exact structure of this error response is inferred from `util.WriteErrorResponse` and `util.WriteError` usage in the provided Go code, as a specific Go struct for errors was not provided.
+type UnprocessableEntity = ErrorResponse
 
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
@@ -6245,6 +6808,12 @@ type PostApiIntegrationsMspTenantsIdUnlinkJSONBody struct {
 	Owner string `json:"owner"`
 }
 
+// ListLocalLDAPSyncRunsParams defines parameters for ListLocalLDAPSyncRuns.
+type ListLocalLDAPSyncRunsParams struct {
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetApiPeersParams defines parameters for GetApiPeers.
 type GetApiPeersParams struct {
 	// Name Filter peers by name
@@ -6363,31 +6932,31 @@ type PutApiIntegrationsBillingSubscriptionJSONRequestBody PutApiIntegrationsBill
 type CreateFalconEDRIntegrationJSONRequestBody = EDRFalconRequest
 
 // UpdateFalconEDRIntegrationJSONRequestBody defines body for UpdateFalconEDRIntegration for application/json ContentType.
-type UpdateFalconEDRIntegrationJSONRequestBody = EDRFalconRequest
+type UpdateFalconEDRIntegrationJSONRequestBody = EDRFalconUpdateRequest
 
 // CreateFleetDMEDRIntegrationJSONRequestBody defines body for CreateFleetDMEDRIntegration for application/json ContentType.
 type CreateFleetDMEDRIntegrationJSONRequestBody = EDRFleetDMRequest
 
 // UpdateFleetDMEDRIntegrationJSONRequestBody defines body for UpdateFleetDMEDRIntegration for application/json ContentType.
-type UpdateFleetDMEDRIntegrationJSONRequestBody = EDRFleetDMRequest
+type UpdateFleetDMEDRIntegrationJSONRequestBody = EDRFleetDMUpdateRequest
 
 // CreateHuntressEDRIntegrationJSONRequestBody defines body for CreateHuntressEDRIntegration for application/json ContentType.
 type CreateHuntressEDRIntegrationJSONRequestBody = EDRHuntressRequest
 
 // UpdateHuntressEDRIntegrationJSONRequestBody defines body for UpdateHuntressEDRIntegration for application/json ContentType.
-type UpdateHuntressEDRIntegrationJSONRequestBody = EDRHuntressRequest
+type UpdateHuntressEDRIntegrationJSONRequestBody = EDRHuntressUpdateRequest
 
 // CreateEDRIntegrationJSONRequestBody defines body for CreateEDRIntegration for application/json ContentType.
 type CreateEDRIntegrationJSONRequestBody = EDRIntuneRequest
 
 // UpdateEDRIntegrationJSONRequestBody defines body for UpdateEDRIntegration for application/json ContentType.
-type UpdateEDRIntegrationJSONRequestBody = EDRIntuneRequest
+type UpdateEDRIntegrationJSONRequestBody = EDRIntuneUpdateRequest
 
 // CreateSentinelOneEDRIntegrationJSONRequestBody defines body for CreateSentinelOneEDRIntegration for application/json ContentType.
 type CreateSentinelOneEDRIntegrationJSONRequestBody = EDRSentinelOneRequest
 
 // UpdateSentinelOneEDRIntegrationJSONRequestBody defines body for UpdateSentinelOneEDRIntegration for application/json ContentType.
-type UpdateSentinelOneEDRIntegrationJSONRequestBody = EDRSentinelOneRequest
+type UpdateSentinelOneEDRIntegrationJSONRequestBody = EDRSentinelOneUpdateRequest
 
 // CreateGoogleIntegrationJSONRequestBody defines body for CreateGoogleIntegration for application/json ContentType.
 type CreateGoogleIntegrationJSONRequestBody = CreateGoogleIntegrationRequest
@@ -6427,6 +6996,15 @@ type CreateSCIMIntegrationJSONRequestBody = CreateScimIntegrationRequest
 
 // UpdateSCIMIntegrationJSONRequestBody defines body for UpdateSCIMIntegration for application/json ContentType.
 type UpdateSCIMIntegrationJSONRequestBody = UpdateScimIntegrationRequest
+
+// PutLocalLDAPSyncConfigJSONRequestBody defines body for PutLocalLDAPSyncConfig for application/json ContentType.
+type PutLocalLDAPSyncConfigJSONRequestBody = LocalLDAPSyncConfigRequest
+
+// CreateLocalLDAPSyncRunJSONRequestBody defines body for CreateLocalLDAPSyncRun for application/json ContentType.
+type CreateLocalLDAPSyncRunJSONRequestBody = LocalLDAPSyncRunRequest
+
+// ConfirmLocalLDAPSyncRunJSONRequestBody defines body for ConfirmLocalLDAPSyncRun for application/json ContentType.
+type ConfirmLocalLDAPSyncRunJSONRequestBody = LocalLDAPSyncRunRequest
 
 // PostApiNetworksJSONRequestBody defines body for PostApiNetworks for application/json ContentType.
 type PostApiNetworksJSONRequestBody = NetworkRequest

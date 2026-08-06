@@ -20,6 +20,8 @@ const (
 	SetupKeys         Module = "setup_keys"
 	Pats              Module = "pats"
 	IdentityProviders Module = "identity_providers"
+	EventStreaming    Module = "event_streaming"
+	EDR               Module = "edr"
 	Services          Module = "services"
 	AgentNetwork      Module = "agent_network"
 
@@ -51,6 +53,8 @@ var All = map[Module]struct{}{
 	SetupKeys:         {},
 	Pats:              {},
 	IdentityProviders: {},
+	EventStreaming:    {},
+	EDR:               {},
 	Services:          {},
 	AgentNetwork:      {},
 

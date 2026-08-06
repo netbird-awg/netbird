@@ -172,11 +172,20 @@ func calculateP95FromHistogram(dp metricdata.HistogramDataPoint[int64]) int64 {
 			if maxVal, defined := dp.Max.Value(); defined {
 				return maxVal
 			}
-			return dp.Sum / int64(dp.Count)
+			return histogramMean(dp.Sum, dp.Count)
 		}
 	}
 
-	return dp.Sum / int64(dp.Count)
+	return histogramMean(dp.Sum, dp.Count)
+}
+
+func histogramMean(sum int64, count uint64) int64 {
+	if count == 0 || count > math.MaxInt64 {
+		// The absolute value of an int64 sum is always smaller than a count
+		// above MaxInt64, so integer division would truncate to zero.
+		return 0
+	}
+	return sum / int64(count) // #nosec G115 -- count is bounded by MaxInt64 above
 }
 
 // Shutdown cleans up resources

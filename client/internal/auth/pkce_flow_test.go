@@ -76,6 +76,32 @@ func TestPromptLogin(t *testing.T) {
 	}
 }
 
+func TestValidateLoopbackRedirectURL(t *testing.T) {
+	tests := []struct {
+		name      string
+		url       string
+		wantError bool
+	}{
+		{name: "IPv4 loopback", url: "http://127.0.0.1:53000/"},
+		{name: "IPv6 loopback", url: "http://[::1]:53000/"},
+		{name: "localhost", url: "http://localhost:53000/"},
+		{name: "non-loopback host", url: "http://192.0.2.1:53000/", wantError: true},
+		{name: "HTTPS callback", url: "https://127.0.0.1:53000/", wantError: true},
+		{name: "missing port", url: "http://127.0.0.1/", wantError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateLoopbackRedirectURL(tt.url)
+			if tt.wantError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestIsPortInExcludedRange(t *testing.T) {
 	tests := []struct {
 		name            string

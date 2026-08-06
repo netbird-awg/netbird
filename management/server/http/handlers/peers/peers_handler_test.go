@@ -34,6 +34,12 @@ import (
 	"github.com/netbirdio/netbird/management/server/mock_server"
 )
 
+func TestAPIGeoNameID(t *testing.T) {
+	require.Equal(t, 42, apiGeoNameID(42))
+	maxIntValue := ^uint(0) >> 1
+	require.Zero(t, apiGeoNameID(maxIntValue+1))
+}
+
 const (
 	testPeerID                = "test_peer"
 	noUpdateChannelTestPeerID = "no-update-channel"

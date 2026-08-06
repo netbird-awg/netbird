@@ -285,6 +285,15 @@ const (
 	// UserTunnelPolicyUpdated indicates a user tunnel policy update.
 	UserTunnelPolicyUpdated Activity = 143
 
+	LocalLDAPConnectorTested   Activity = 144
+	LocalLDAPSyncConfigUpdated Activity = 145
+	LocalLDAPSyncPreviewed     Activity = 146
+	LocalLDAPSyncRunCreated    Activity = 147
+	LocalLDAPSyncPaused        Activity = 148
+	LocalLDAPSyncResumed       Activity = 149
+	LocalLDAPSyncRunConfirmed  Activity = 150
+	LocalLDAPSyncRunCancelled  Activity = 151
+
 	AccountDeleted Activity = 99999
 )
 
@@ -463,6 +472,14 @@ var activityMap = map[Activity]Code{
 
 	AccountTunnelPolicyUpdated: {"Account tunnel policy updated", "account.setting.tunnel.policy.update"},
 	UserTunnelPolicyUpdated:    {"User tunnel policy updated", "user.tunnel.policy.update"},
+	LocalLDAPConnectorTested:   {"Local LDAP connector tested", "identityprovider.test"},
+	LocalLDAPSyncConfigUpdated: {"Local LDAP sync configuration updated", "local.integration.ldap.sync.config.update"},
+	LocalLDAPSyncPreviewed:     {"Local LDAP sync preview generated", "local.integration.ldap.sync.preview"},
+	LocalLDAPSyncRunCreated:    {"Local LDAP sync run created", "local.integration.ldap.sync.run.create"},
+	LocalLDAPSyncPaused:        {"Local LDAP sync paused", "local.integration.ldap.sync.pause"},
+	LocalLDAPSyncResumed:       {"Local LDAP sync resumed", "local.integration.ldap.sync.resume"},
+	LocalLDAPSyncRunConfirmed:  {"Local LDAP high-risk sync run confirmed", "local.integration.ldap.sync.run.confirm"},
+	LocalLDAPSyncRunCancelled:  {"Local LDAP sync run cancelled", "local.integration.ldap.sync.run.cancel"},
 
 	DomainAdded:     {"Domain added", "domain.add"},
 	DomainDeleted:   {"Domain deleted", "domain.delete"},

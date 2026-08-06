@@ -142,6 +142,7 @@ type MockAccountManager struct {
 	CreateIdentityProviderFunc func(ctx context.Context, accountID, userID string, idp *types.IdentityProvider) (*types.IdentityProvider, error)
 	UpdateIdentityProviderFunc func(ctx context.Context, accountID, idpID, userID string, idp *types.IdentityProvider) (*types.IdentityProvider, error)
 	DeleteIdentityProviderFunc func(ctx context.Context, accountID, idpID, userID string) error
+	ListLDAPGroupsFunc         func(ctx context.Context, accountID, idpID, userID string) ([]string, error)
 	CreatePeerJobFunc          func(ctx context.Context, accountID, peerID, userID string, job *types.Job) error
 	GetAllPeerJobsFunc         func(ctx context.Context, accountID, userID, peerID string) ([]*types.Job, error)
 	GetPeerJobByIDFunc         func(ctx context.Context, accountID, userID, peerID, jobID string) (*types.Job, error)
@@ -1163,4 +1164,12 @@ func (am *MockAccountManager) DeleteIdentityProvider(ctx context.Context, accoun
 		return am.DeleteIdentityProviderFunc(ctx, accountID, idpID, userID)
 	}
 	return status.Errorf(codes.Unimplemented, "method DeleteIdentityProvider is not implemented")
+}
+
+// ListLDAPGroups mocks ListLDAPGroups of the AccountManager interface
+func (am *MockAccountManager) ListLDAPGroups(ctx context.Context, accountID, idpID, userID string) ([]string, error) {
+	if am.ListLDAPGroupsFunc != nil {
+		return am.ListLDAPGroupsFunc(ctx, accountID, idpID, userID)
+	}
+	return nil, status.Errorf(codes.Unimplemented, "method ListLDAPGroups is not implemented")
 }

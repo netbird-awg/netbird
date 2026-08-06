@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync/atomic"
 
 	"github.com/dexidp/dex/storage"
 	"github.com/google/uuid"
@@ -71,6 +72,9 @@ type EmbeddedIdPConfig struct {
 	// It can also be set with NB_IDP_SESSION_COOKIE_ENCRYPTION_KEY. The value must be 16, 24, or 32
 	// bytes when provided as a raw string, or base64-encoded to one of those lengths.
 	SessionCookieEncryptionKey string
+	// MFASecretEncryptionKey encrypts native Dex TOTP secrets at rest. It is
+	// injected from the management datastore key and is not serialized.
+	MFASecretEncryptionKey string
 	// Dashboard Post logout redirect URIs, these are required to tell
 	// Dex what to allow when an RP-Initiated logout is started by the frontend
 	// at least one of these must match the dashboard base URL or the dashboard
@@ -205,7 +209,8 @@ func (c *EmbeddedIdPConfig) ToYAMLConfig() (*dex.YAMLConfig, error) {
 				RedirectURIs: redirectURIs,
 			},
 		},
-		StaticConnectors: c.StaticConnectors,
+		StaticConnectors:       c.StaticConnectors,
+		MFASecretEncryptionKey: c.MFASecretEncryptionKey,
 	}
 
 	// Always initialize MFA providers and sessions so TOTP can be toggled at runtime.
@@ -267,7 +272,7 @@ func configureMFA(cfg *dex.YAMLConfig, sessionMaxLifetime, sessionIdleTimeout st
 		Config: map[string]interface{}{
 			"issuer": "NetBird",
 		},
-		ConnectorTypes: []string{LocalConnectorID},
+		ConnectorTypes: []string{LocalConnectorID, "ldap"},
 	}}
 
 	if sessionMaxLifetime == "" {
@@ -291,7 +296,9 @@ func configureMFA(cfg *dex.YAMLConfig, sessionMaxLifetime, sessionIdleTimeout st
 		CookieEncryptionKey:        cookieEncryptionKey,
 	}
 	// Absolutely required, otherwise the dex server will omit the MFA configuration entirely
-	os.Setenv("DEX_SESSIONS_ENABLED", "true")
+	if err := os.Setenv("DEX_SESSIONS_ENABLED", "true"); err != nil {
+		return fmt.Errorf("enable Dex sessions: %w", err)
+	}
 
 	// Note: MFAChain on clients is NOT set here.
 	// It is toggled at runtime via SetMFAEnabled() based on the account settings DB value.
@@ -368,7 +375,7 @@ type EmbeddedIdPManager struct {
 	provider   *dex.Provider
 	appMetrics telemetry.AppMetrics
 	config     EmbeddedIdPConfig
-	mfaEnabled bool
+	mfaEnabled atomic.Bool
 }
 
 // NewEmbeddedIdPManager creates a new instance of EmbeddedIdPManager from a configuration.
@@ -427,7 +434,7 @@ func NewEmbeddedIdPManager(ctx context.Context, config *EmbeddedIdPConfig, appMe
 
 // Handler returns the HTTP handler for serving OIDC requests.
 func (m *EmbeddedIdPManager) Handler() http.Handler {
-	return m.provider.Handler()
+	return m.handlerWithLogoutDiscovery()
 }
 
 // Stop gracefully shuts down the embedded IdP provider.
@@ -539,7 +546,10 @@ func (m *EmbeddedIdPManager) CreateUser(ctx context.Context, email, name, accoun
 	}
 
 	// Generate a random password for the new user
-	password := GeneratePassword(16, 2, 2, 2)
+	password, err := GeneratePassword(16, 2, 2, 2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate user password: %w", err)
+	}
 
 	// Create the user via provider (handles hashing and ID generation)
 	// The provider returns an encoded user ID in Dex's format (base64 protobuf with connector ID)
@@ -666,12 +676,10 @@ func (m *EmbeddedIdPManager) DeleteUser(ctx context.Context, userID string) erro
 // It verifies that the current user is changing their own password and
 // validates the current password before updating to the new password.
 func (m *EmbeddedIdPManager) UpdateUserPassword(ctx context.Context, currentUserID, targetUserID string, oldPassword, newPassword string) error {
-	// Verify the user is changing their own password
 	if currentUserID != targetUserID {
 		return fmt.Errorf("users can only change their own password")
 	}
 
-	// Verify the new password is different from the old password
 	if oldPassword == newPassword {
 		return fmt.Errorf("new password must be different from current password")
 	}
@@ -807,13 +815,13 @@ func (m *EmbeddedIdPManager) SetMFAEnabled(ctx context.Context, enabled bool) er
 	}, mfaChain); err != nil {
 		return fmt.Errorf("failed to set MFA enabled=%v: %w", enabled, err)
 	}
-	m.mfaEnabled = enabled
+	m.mfaEnabled.Store(enabled)
 	return nil
 }
 
 // IsMFAEnabled returns whether TOTP MFA is currently enabled for local users.
 func (m *EmbeddedIdPManager) IsMFAEnabled() bool {
-	return m.mfaEnabled
+	return m.mfaEnabled.Load()
 }
 
 // HasNonLocalConnectors checks if there are any identity provider connectors other than local.
