@@ -59,6 +59,24 @@ func (e AccountSettingsTunnelPolicy) Valid() bool {
 	}
 }
 
+// Defines values for AccountSettingsTunnelProfileAction.
+const (
+	AccountSettingsTunnelProfileActionActivate AccountSettingsTunnelProfileAction = "activate"
+	AccountSettingsTunnelProfileActionRollback AccountSettingsTunnelProfileAction = "rollback"
+)
+
+// Valid indicates whether the value is a known member of the AccountSettingsTunnelProfileAction enum.
+func (e AccountSettingsTunnelProfileAction) Valid() bool {
+	switch e {
+	case AccountSettingsTunnelProfileActionActivate:
+		return true
+	case AccountSettingsTunnelProfileActionRollback:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AgentNetworkCatalogProviderKind.
 const (
 	AgentNetworkCatalogProviderKindCustom   AgentNetworkCatalogProviderKind = "custom"
@@ -1379,12 +1397,15 @@ func (e TenantResponseStatus) Valid() bool {
 // Defines values for TunnelProfileProtocolVersion.
 const (
 	TunnelProfileProtocolVersionAwg2 TunnelProfileProtocolVersion = "awg2"
+	TunnelProfileProtocolVersionAwg3 TunnelProfileProtocolVersion = "awg3"
 )
 
 // Valid indicates whether the value is a known member of the TunnelProfileProtocolVersion enum.
 func (e TunnelProfileProtocolVersion) Valid() bool {
 	switch e {
 	case TunnelProfileProtocolVersionAwg2:
+		return true
+	case TunnelProfileProtocolVersionAwg3:
 		return true
 	default:
 		return false
@@ -2032,6 +2053,9 @@ type AccountSettings struct {
 	// PeerLoginExpirationEnabled Enables or disables peer login expiration globally. After peer's login has expired the user has to log in (authenticate). Applies only to peers that were added by a user (interactive SSO login).
 	PeerLoginExpirationEnabled bool `json:"peer_login_expiration_enabled"`
 
+	// PendingTunnelProfile Profile distributed for readiness but not yet active.
+	PendingTunnelProfile *TunnelProfile `json:"pending_tunnel_profile,omitempty"`
+
 	// RegularUsersViewBlocked Allows blocking regular users from viewing parts of the system.
 	RegularUsersViewBlocked bool `json:"regular_users_view_blocked"`
 
@@ -2043,10 +2067,19 @@ type AccountSettings struct {
 
 	// TunnelProfile Account-wide, immutable-revision AmneziaWG tunnel profile.
 	TunnelProfile *TunnelProfile `json:"tunnel_profile,omitempty"`
+
+	// TunnelProfileAction Activates the staged profile or stages the retained previous profile for rollback.
+	TunnelProfileAction *AccountSettingsTunnelProfileAction `json:"tunnel_profile_action,omitempty"`
+
+	// TunnelProfileGraceUntil End of the bounded rollback window for the previous profile.
+	TunnelProfileGraceUntil *time.Time `json:"tunnel_profile_grace_until,omitempty"`
 }
 
 // AccountSettingsTunnelPolicy Selects the account-wide tunnel compatibility policy.
 type AccountSettingsTunnelPolicy string
+
+// AccountSettingsTunnelProfileAction Activates the staged profile or stages the retained previous profile for rollback.
+type AccountSettingsTunnelProfileAction string
 
 // AgentNetworkAccessLog One per-request agent-network (LLM) access log entry with flattened, queryable LLM dimensions.
 type AgentNetworkAccessLog struct {

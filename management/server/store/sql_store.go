@@ -292,6 +292,15 @@ func (s *SqlStore) SaveAccount(ctx context.Context, account *types.Account) erro
 	s.checkAccountDomainBeforeSave(ctx, account.Id, account.Domain)
 
 	ensureAccountTunnelPolicyTimestamps(account)
+	storedSettings, err := settingsForStorage(account.Settings, s.fieldEncrypt)
+	if err != nil {
+		return err
+	}
+	inMemorySettings := account.Settings
+	account.Settings = storedSettings
+	defer func() {
+		account.Settings = inMemorySettings
+	}()
 	generateAccountSQLTypes(account)
 
 	// Encrypt sensitive user data before saving
@@ -305,7 +314,7 @@ func (s *SqlStore) SaveAccount(ctx context.Context, account *types.Account) erro
 		group.StoreGroupPeers()
 	}
 
-	err := s.transaction(func(tx *gorm.DB) error {
+	err = s.transaction(func(tx *gorm.DB) error {
 		result := tx.Select(clause.Associations).Delete(account.Policies, "account_id = ?", account.Id)
 		if result.Error != nil {
 			return result.Error
@@ -364,6 +373,51 @@ func ensureTunnelPolicyTimestamp(updatedAt *time.Time, createdAt time.Time) {
 		createdAt = time.Now().UTC()
 	}
 	*updatedAt = createdAt
+}
+
+func settingsForStorage(
+	settings *types.Settings,
+	enc *crypt.FieldEncrypt,
+) (*types.Settings, error) {
+	if settings == nil {
+		return nil, errors.New("account settings are nil")
+	}
+	settingsCopy := settings.Copy()
+	profiles := []*types.TunnelProfile{
+		settingsCopy.TunnelProfile,
+		settingsCopy.TunnelProfilePending,
+		settingsCopy.TunnelProfilePrevious,
+	}
+	for _, profile := range profiles {
+		if profile != nil {
+			if err := profile.EncryptSensitiveData(enc); err != nil {
+				return nil, fmt.Errorf("encrypt tunnel profile: %w", err)
+			}
+		}
+	}
+	return settingsCopy, nil
+}
+
+func decryptSettings(
+	settings *types.Settings,
+	enc *crypt.FieldEncrypt,
+) error {
+	if settings == nil {
+		return nil
+	}
+	profiles := []*types.TunnelProfile{
+		settings.TunnelProfile,
+		settings.TunnelProfilePending,
+		settings.TunnelProfilePrevious,
+	}
+	for _, profile := range profiles {
+		if profile != nil {
+			if err := profile.DecryptSensitiveData(enc); err != nil {
+				return fmt.Errorf("decrypt tunnel profile: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 // generateAccountSQLTypes generates the GORM compatible types for the account
@@ -1359,12 +1413,18 @@ func (s *SqlStore) getAccountGorm(ctx context.Context, accountID string) (*types
 		account.NameServerGroups[ns.ID] = &ns
 	}
 	account.NameServerGroupsG = nil
+	if err := decryptSettings(account.Settings, s.fieldEncrypt); err != nil {
+		return nil, err
+	}
 	return &account, nil
 }
 
 func (s *SqlStore) getAccountPgx(ctx context.Context, accountID string) (*types.Account, error) {
 	account, err := s.getAccount(ctx, accountID)
 	if err != nil {
+		return nil, err
+	}
+	if err := decryptSettings(account.Settings, s.fieldEncrypt); err != nil {
 		return nil, err
 	}
 
@@ -1691,6 +1751,8 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 			settings_dashboard_features, settings_auto_update_version, settings_auto_update_always,
 			settings_peer_expose_enabled, settings_peer_expose_groups,
 			settings_tunnel_policy, settings_tunnel_policy_updated_at, settings_tunnel_profile,
+			settings_tunnel_profile_pending, settings_tunnel_profile_previous,
+			settings_tunnel_profile_grace_until,
 			-- Embedded ExtraSettings
 			settings_extra_peer_approval_enabled, settings_extra_user_approval_required,
 			settings_extra_integrated_validator, settings_extra_integrated_validator_groups
@@ -1723,6 +1785,9 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 		tunnelPolicy                     sql.NullString
 		tunnelPolicyUpdatedAt            sql.NullTime
 		tunnelProfile                    sql.NullString
+		tunnelProfilePending             sql.NullString
+		tunnelProfilePrevious            sql.NullString
+		tunnelProfileGraceUntil          sql.NullTime
 		sExtraPeerApprovalEnabled        sql.NullBool
 		sExtraUserApprovalRequired       sql.NullBool
 		sExtraIntegratedValidator        sql.NullString
@@ -1749,6 +1814,8 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 		&sDashboardFeatures, &autoUpdateVersion, &autoUpdateAlways,
 		&peerExposeEnabled, &peerExposeGroups,
 		&tunnelPolicy, &tunnelPolicyUpdatedAt, &tunnelProfile,
+		&tunnelProfilePending, &tunnelProfilePrevious,
+		&tunnelProfileGraceUntil,
 		&sExtraPeerApprovalEnabled, &sExtraUserApprovalRequired,
 		&sExtraIntegratedValidator, &sExtraIntegratedValidatorGroups,
 	)
@@ -1869,6 +1936,26 @@ func (s *SqlStore) getAccount(ctx context.Context, accountID string) (*types.Acc
 		); err != nil {
 			return nil, fmt.Errorf("decode tunnel profile: %w", err)
 		}
+	}
+	if tunnelProfilePending.Valid && tunnelProfilePending.String != "" {
+		if err := json.Unmarshal(
+			[]byte(tunnelProfilePending.String),
+			&account.Settings.TunnelProfilePending,
+		); err != nil {
+			return nil, fmt.Errorf("decode pending tunnel profile: %w", err)
+		}
+	}
+	if tunnelProfilePrevious.Valid && tunnelProfilePrevious.String != "" {
+		if err := json.Unmarshal(
+			[]byte(tunnelProfilePrevious.String),
+			&account.Settings.TunnelProfilePrevious,
+		); err != nil {
+			return nil, fmt.Errorf("decode previous tunnel profile: %w", err)
+		}
+	}
+	if tunnelProfileGraceUntil.Valid {
+		account.Settings.TunnelProfileGraceUntil =
+			tunnelProfileGraceUntil.Time
 	}
 
 	if sExtraPeerApprovalEnabled.Valid {
@@ -3087,6 +3174,13 @@ func (s *SqlStore) GetAccountSettings(ctx context.Context, lockStrength LockingS
 			return nil, status.Errorf(status.NotFound, "settings not found")
 		}
 		return nil, status.Errorf(status.Internal, "issue getting settings from store: %s", err)
+	}
+	if err := decryptSettings(accountSettings.Settings, s.fieldEncrypt); err != nil {
+		return nil, status.Errorf(
+			status.Internal,
+			"issue decrypting settings from store: %s",
+			err,
+		)
 	}
 	return accountSettings.Settings, nil
 }
@@ -4494,14 +4588,17 @@ func (s *SqlStore) SaveDNSSettings(ctx context.Context, accountID string, settin
 
 // SaveAccountSettings stores the account settings in DB.
 func (s *SqlStore) SaveAccountSettings(ctx context.Context, accountID string, settings *types.Settings) error {
-	settingsCopy := *settings
+	settingsCopy, err := settingsForStorage(settings, s.fieldEncrypt)
+	if err != nil {
+		return status.Errorf(status.Internal, "failed to encrypt account settings")
+	}
 	ensureTunnelPolicyTimestamp(
 		&settingsCopy.TunnelPolicyUpdatedAt,
 		time.Time{},
 	)
 	result := s.db.Model(&types.Account{}).
 		Select("*").Where(idQueryCondition, accountID).
-		Updates(&types.AccountSettings{Settings: &settingsCopy})
+		Updates(&types.AccountSettings{Settings: settingsCopy})
 	if result.Error != nil {
 		log.WithContext(ctx).Errorf("failed to save account settings to store: %v", result.Error)
 		return status.Errorf(status.Internal, "failed to save account settings to store")

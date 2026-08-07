@@ -32,6 +32,35 @@ func mustEncodePrefix(t *testing.T, p netip.Prefix) []byte {
 	return b
 }
 
+func TestMaskSecretsRemovesAWG3HeaderProtectionKeys(t *testing.T) {
+	response := &mgmProto.SyncResponse{
+		PeerConfig: &mgmProto.PeerConfig{
+			TunnelProfile: &mgmProto.TunnelProfile{
+				HeaderProtectionKey: bytes.Repeat([]byte{0x4a}, 32),
+			},
+		},
+		NetworkMap: &mgmProto.NetworkMap{
+			PeerConfig: &mgmProto.PeerConfig{
+				TunnelProfile: &mgmProto.TunnelProfile{
+					HeaderProtectionKey: bytes.Repeat([]byte{0x5b}, 32),
+				},
+			},
+		},
+	}
+	generator := &BundleGenerator{syncResponse: response}
+
+	generator.maskSecrets()
+
+	require.Empty(
+		t,
+		response.PeerConfig.TunnelProfile.HeaderProtectionKey,
+	)
+	require.Empty(
+		t,
+		response.NetworkMap.PeerConfig.TunnelProfile.HeaderProtectionKey,
+	)
+}
+
 func TestAnonymizeStateFile(t *testing.T) {
 	testState := map[string]json.RawMessage{
 		"null_state": json.RawMessage("null"),

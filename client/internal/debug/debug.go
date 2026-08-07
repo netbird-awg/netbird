@@ -872,24 +872,38 @@ func (g *BundleGenerator) addSyncResponse() error {
 }
 
 func (g *BundleGenerator) maskSecrets() {
-	if g.syncResponse == nil || g.syncResponse.NetbirdConfig == nil {
+	if g.syncResponse == nil {
 		return
 	}
 
-	if g.syncResponse.NetbirdConfig.Flow != nil {
-		g.syncResponse.NetbirdConfig.Flow.TokenPayload = maskedValue
+	if g.syncResponse.NetbirdConfig != nil {
+		if g.syncResponse.NetbirdConfig.Flow != nil {
+			g.syncResponse.NetbirdConfig.Flow.TokenPayload = maskedValue
 
-	}
+		}
 
-	if g.syncResponse.NetbirdConfig.Relay != nil {
-		g.syncResponse.NetbirdConfig.Relay.TokenPayload = maskedValue
-	}
+		if g.syncResponse.NetbirdConfig.Relay != nil {
+			g.syncResponse.NetbirdConfig.Relay.TokenPayload = maskedValue
+		}
 
-	for i := range g.syncResponse.NetbirdConfig.Turns {
-		if g.syncResponse.NetbirdConfig.Turns[i] != nil {
-			g.syncResponse.NetbirdConfig.Turns[i].Password = maskedValue
+		for i := range g.syncResponse.NetbirdConfig.Turns {
+			if g.syncResponse.NetbirdConfig.Turns[i] != nil {
+				g.syncResponse.NetbirdConfig.Turns[i].Password = maskedValue
+			}
 		}
 	}
+
+	maskTunnelProfile(g.syncResponse.PeerConfig)
+	if g.syncResponse.NetworkMap != nil {
+		maskTunnelProfile(g.syncResponse.NetworkMap.PeerConfig)
+	}
+}
+
+func maskTunnelProfile(peerConfig *mgmProto.PeerConfig) {
+	if peerConfig == nil || peerConfig.TunnelProfile == nil {
+		return
+	}
+	peerConfig.TunnelProfile.HeaderProtectionKey = nil
 }
 
 func (g *BundleGenerator) addStateFile() error {

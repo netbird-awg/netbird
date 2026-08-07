@@ -12,15 +12,21 @@ import (
 
 const (
 	ProtocolAmneziaWG2 = "awg2"
-	AdapterRevision    = "2ae1edae71cfa2d5a3265e3d8e316f0a5914944f"
+	ProtocolAmneziaWG3 = "awg3"
+	AdapterRevision    = "6800afdcafeab8ed59e850c4f6adabd9635831d6"
 
-	maxProfileParametersSize = 32 * 1024
-	maxJunkPacketCount       = 32
-	maxJunkPacketSize        = 1280
-	maxHandshakePadding      = 64
-	maxTransportPadding      = 32
-	maxIPacketSpecLength     = 4096
-	maxIPacketTags           = 32
+	maxProfileParametersSize  = 32 * 1024
+	maxJunkPacketCount        = 32
+	maxJunkPacketSize         = 1280
+	maxHandshakePadding       = 64
+	maxTransportPadding       = 32
+	maxIPacketSpecLength      = 4096
+	maxIPacketTags            = 32
+	headerProtectionKeySize   = 32
+	headerProtectionNonceSize = 12
+	maxContentPadding         = 1280
+	maxTimingSeconds          = 24 * 60 * 60
+	maxHandshakeAttempts      = 64
 )
 
 // Mode identifies the on-wire tunnel format selected for a peer.
@@ -28,16 +34,21 @@ type Mode uint8
 
 const (
 	ModeStandard Mode = iota
-	ModeAmneziaWG
+	ModeAmneziaWG2
+	ModeAmneziaWG3
 )
+
+const ModeAmneziaWG = ModeAmneziaWG2
 
 // String returns the UAPI representation of the tunnel mode.
 func (m Mode) String() string {
 	switch m {
 	case ModeStandard:
 		return "standard"
-	case ModeAmneziaWG:
+	case ModeAmneziaWG2:
 		return "amneziawg"
+	case ModeAmneziaWG3:
+		return "amneziawg3"
 	default:
 		return "unknown"
 	}
@@ -66,11 +77,29 @@ type AWG2Parameters struct {
 	IPacket5 string `json:"i5,omitempty"`
 }
 
+// AWG3Parameters contains the additional AmneziaWG v3 profile parameters.
+type AWG3Parameters struct {
+	ContentPaddingAddition      string `json:"content_padding_addition,omitempty"`
+	PersistentKeepaliveInterval string `json:"persistent_keepalive_interval,omitempty"`
+	RekeyAfterTime              string `json:"rekey_after_time,omitempty"`
+	RekeyTimeout                string `json:"rekey_timeout,omitempty"`
+	RejectAfterTime             string `json:"reject_after_time,omitempty"`
+	KeepaliveTimeout            string `json:"keepalive_timeout,omitempty"`
+	MaxHandshakeAttempts        string `json:"max_handshake_attempts,omitempty"`
+}
+
+type awg3WireParameters struct {
+	AWG2Parameters
+	AWG3Parameters
+}
+
 // Profile is the validated userspace tunnel profile assigned by Management.
 type Profile struct {
-	ProtocolVersion string
-	Revision        uint64
-	AWG2            AWG2Parameters
+	ProtocolVersion     string
+	Revision            uint64
+	AWG2                AWG2Parameters
+	AWG3                AWG3Parameters
+	HeaderProtectionKey [headerProtectionKeySize]byte
 }
 
 // Equal reports whether two profiles describe the same immutable revision.
@@ -80,11 +109,24 @@ func (p *Profile) Equal(other *Profile) bool {
 	}
 	return p.ProtocolVersion == other.ProtocolVersion &&
 		p.Revision == other.Revision &&
-		p.AWG2 == other.AWG2
+		p.AWG2 == other.AWG2 &&
+		p.AWG3 == other.AWG3 &&
+		p.HeaderProtectionKey == other.HeaderProtectionKey
 }
 
 // DecodeProfile decodes and validates an assigned tunnel profile.
 func DecodeProfile(protocolVersion string, revision uint64, parameters []byte) (*Profile, error) {
+	return DecodeProfileWithHeaderKey(protocolVersion, revision, parameters, nil)
+}
+
+// DecodeProfileWithHeaderKey decodes a profile and its separately delivered
+// AWG3 header protection key.
+func DecodeProfileWithHeaderKey(
+	protocolVersion string,
+	revision uint64,
+	parameters,
+	headerProtectionKey []byte,
+) (*Profile, error) {
 	if len(parameters) == 0 {
 		return nil, errors.New("tunnel profile parameters are empty")
 	}
@@ -94,24 +136,40 @@ func DecodeProfile(protocolVersion string, revision uint64, parameters []byte) (
 			maxProfileParametersSize,
 		)
 	}
-	if protocolVersion != ProtocolAmneziaWG2 {
+	if protocolVersion != ProtocolAmneziaWG2 && protocolVersion != ProtocolAmneziaWG3 {
 		return nil, fmt.Errorf("unsupported tunnel protocol %q", protocolVersion)
 	}
 
-	var awg2 AWG2Parameters
+	var wire awg3WireParameters
 	decoder := json.NewDecoder(bytes.NewReader(parameters))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&awg2); err != nil {
-		return nil, fmt.Errorf("decode AWG2 parameters: %w", err)
+	if err := decoder.Decode(&wire); err != nil {
+		return nil, fmt.Errorf("decode %s parameters: %w", protocolVersion, err)
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
 		return nil, err
+	}
+	if protocolVersion == ProtocolAmneziaWG2 && wire.AWG3Parameters != (AWG3Parameters{}) {
+		return nil, errors.New("AWG2 profile contains AWG3 parameters")
+	}
+	if protocolVersion == ProtocolAmneziaWG2 && len(headerProtectionKey) != 0 {
+		return nil, errors.New("AWG2 profile contains an AWG3 header protection key")
 	}
 
 	profile := &Profile{
 		ProtocolVersion: protocolVersion,
 		Revision:        revision,
-		AWG2:            awg2,
+		AWG2:            wire.AWG2Parameters,
+		AWG3:            wire.AWG3Parameters,
+	}
+	if len(headerProtectionKey) != 0 {
+		if len(headerProtectionKey) != headerProtectionKeySize {
+			return nil, fmt.Errorf(
+				"AWG3 header protection key must be %d bytes",
+				headerProtectionKeySize,
+			)
+		}
+		copy(profile.HeaderProtectionKey[:], headerProtectionKey)
 	}
 	if err := profile.Validate(); err != nil {
 		return nil, err
@@ -124,7 +182,8 @@ func (p *Profile) Validate() error {
 	if p == nil {
 		return errors.New("tunnel profile is nil")
 	}
-	if p.ProtocolVersion != ProtocolAmneziaWG2 {
+	if p.ProtocolVersion != ProtocolAmneziaWG2 &&
+		p.ProtocolVersion != ProtocolAmneziaWG3 {
 		return fmt.Errorf("unsupported tunnel protocol %q", p.ProtocolVersion)
 	}
 	if p.Revision == 0 {
@@ -139,7 +198,83 @@ func (p *Profile) Validate() error {
 	if err := validateHeaders(p.AWG2); err != nil {
 		return err
 	}
-	return validateIPackets(p.AWG2)
+	if err := validateIPackets(p.AWG2); err != nil {
+		return err
+	}
+	if p.ProtocolVersion == ProtocolAmneziaWG3 {
+		return validateAWG3(p)
+	}
+	return nil
+}
+
+// SupportsMode reports whether the profile can configure the requested mode.
+func (p *Profile) SupportsMode(mode Mode) bool {
+	if p == nil {
+		return mode == ModeStandard
+	}
+	switch mode {
+	case ModeStandard, ModeAmneziaWG2:
+		return true
+	case ModeAmneziaWG3:
+		return p.ProtocolVersion == ProtocolAmneziaWG3
+	default:
+		return false
+	}
+}
+
+func validateAWG3(profile *Profile) error {
+	var zeroKey [headerProtectionKeySize]byte
+	if profile.HeaderProtectionKey == zeroKey {
+		return errors.New("AWG3 header protection key is missing")
+	}
+	paddings := []int{
+		profile.AWG2.InitiationPadding,
+		profile.AWG2.ResponsePadding,
+		profile.AWG2.CookiePadding,
+		profile.AWG2.TransportPadding,
+	}
+	for i, padding := range paddings {
+		if padding < headerProtectionNonceSize {
+			return fmt.Errorf(
+				"s%d must be at least %d bytes for AWG3",
+				i+1,
+				headerProtectionNonceSize,
+			)
+		}
+	}
+	checks := []struct {
+		name  string
+		value string
+		max   uint32
+	}{
+		{"content_padding_addition", profile.AWG3.ContentPaddingAddition, maxContentPadding},
+		{"persistent_keepalive_interval", profile.AWG3.PersistentKeepaliveInterval, maxTimingSeconds},
+		{"rekey_after_time", profile.AWG3.RekeyAfterTime, maxTimingSeconds},
+		{"rekey_timeout", profile.AWG3.RekeyTimeout, maxTimingSeconds},
+		{"reject_after_time", profile.AWG3.RejectAfterTime, maxTimingSeconds},
+		{"keepalive_timeout", profile.AWG3.KeepaliveTimeout, maxTimingSeconds},
+		{"max_handshake_attempts", profile.AWG3.MaxHandshakeAttempts, maxHandshakeAttempts},
+	}
+	for _, check := range checks {
+		if err := validateUintRange(check.name, check.value, check.max); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateUintRange(name, value string, maximum uint32) error {
+	if value == "" {
+		return nil
+	}
+	rng, err := parseHeaderRange(value)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", name, err)
+	}
+	if rng.end > maximum {
+		return fmt.Errorf("%s must not exceed %d", name, maximum)
+	}
+	return nil
 }
 
 func ensureJSONEOF(decoder *json.Decoder) error {

@@ -687,10 +687,11 @@ func tunnelProfileFromProto(profile *mgmProto.TunnelProfile) (*tunnel.Profile, e
 	if skew > maxClockSkew {
 		return nil, fmt.Errorf("management clock skew %s exceeds %s", skew, maxClockSkew)
 	}
-	return tunnel.DecodeProfile(
+	return tunnel.DecodeProfileWithHeaderKey(
 		profile.GetProtocolVersion(),
 		profile.GetRevision(),
 		profile.GetParameters(),
+		profile.GetHeaderProtectionKey(),
 	)
 }
 

@@ -480,8 +480,8 @@ github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJ
 github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/netbird-awg/wireguard-go v0.0.0-20260806121550-2ae1edae71cf h1:rFIsEjcj0Wd310Lm+vTE7yzKQvc68dDMZmCs337xXuc=
-github.com/netbird-awg/wireguard-go v0.0.0-20260806121550-2ae1edae71cf/go.mod h1:rpwXGsirqLqN2L0JDJQlwOboGHmptD5ZD6T2VmcqhTw=
+github.com/netbird-awg/wireguard-go v0.0.0-20260807131936-6800afdcafea h1:g0NxkoJjYNK/hbJXx1MnY/Ggs8b6DHyxJeb/5233CmQ=
+github.com/netbird-awg/wireguard-go v0.0.0-20260807131936-6800afdcafea/go.mod h1:rpwXGsirqLqN2L0JDJQlwOboGHmptD5ZD6T2VmcqhTw=
 github.com/netbirdio/dex v0.244.1-0.20260716205454-a163de3129e5 h1:3PwQv8aR46qN2u16+Dv6udnH3sbVKX5KrGwF35CKSI0=
 github.com/netbirdio/dex v0.244.1-0.20260716205454-a163de3129e5/go.mod h1:IHH+H8vK2GfqtIt5u/5OdPh18yk0oDHuj2vz5+Goetg=
 github.com/netbirdio/dex/api/v2 v2.0.0-20260512110716-8d70ad8647c1 h1:neE7z+FPUkldl3faK/Jt+hJK2L+1XfQ1W33TQhU9m88=

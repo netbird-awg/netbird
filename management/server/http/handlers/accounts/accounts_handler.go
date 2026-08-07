@@ -318,6 +318,17 @@ func (h *handler) updateAccountRequestSettings(req api.PutApiAccountsAccountIdJS
 			Parameters: parameters,
 		}
 	}
+	if req.Settings.TunnelProfileAction != nil {
+		if !req.Settings.TunnelProfileAction.Valid() {
+			return nil, status.Errorf(
+				status.InvalidArgument,
+				"invalid tunnel profile action",
+			)
+		}
+		returnSettings.TunnelProfileAction = types.TunnelProfileAction(
+			*req.Settings.TunnelProfileAction,
+		)
+	}
 
 	if returnSettings.AgentNetworkOnly &&
 		(returnSettings.DashboardFeatures == nil ||
@@ -466,6 +477,12 @@ func toAccountResponse(accountID string, settings *types.Settings, meta *types.A
 		apiSettings.TunnelPolicy = &tunnelPolicy
 	}
 	apiSettings.TunnelProfile = toAPITunnelProfile(settings.TunnelProfile)
+	apiSettings.PendingTunnelProfile = toAPITunnelProfile(
+		settings.TunnelProfilePending,
+	)
+	if !settings.TunnelProfileGraceUntil.IsZero() {
+		apiSettings.TunnelProfileGraceUntil = &settings.TunnelProfileGraceUntil
+	}
 
 	if settings.NetworkRange.IsValid() {
 		networkRangeStr := settings.NetworkRange.String()

@@ -410,6 +410,21 @@ components:
           example: prefer_awg
         tunnel_profile:
           $ref: '#/components/schemas/TunnelProfile'
+        pending_tunnel_profile:
+          allOf:
+            - $ref: '#/components/schemas/TunnelProfile'
+          description: Profile distributed for readiness but not yet active.
+          readOnly: true
+        tunnel_profile_grace_until:
+          description: End of the bounded rollback window for the previous profile.
+          type: string
+          format: date-time
+          readOnly: true
+        tunnel_profile_action:
+          description: Activates the staged profile or stages the retained previous profile for rollback.
+          type: string
+          enum: ["activate", "rollback"]
+          writeOnly: true
       required:
         - peer_login_expiration_enabled
         - peer_login_expiration
@@ -425,8 +440,8 @@ components:
         protocol_version:
           description: Obfuscation protocol implemented by compatible clients.
           type: string
-          enum: ["awg2"]
-          example: awg2
+          enum: ["awg2", "awg3"]
+          example: awg3
         revision:
           description: Monotonically increasing profile revision.
           type: integer

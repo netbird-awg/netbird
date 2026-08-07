@@ -1992,10 +1992,14 @@ func (e *Engine) peerTunnelState(
 		return current, nil
 	}
 	if target.mode == tunnel.ModeStandard && e.config.TunnelProfile != nil {
+		mode, err := tunnelModeForProtocol(peerConfig.GetTunnelProtocolVersion())
+		if err != nil {
+			return peerTunnelState{}, err
+		}
 		return peerTunnelState{
-			mode:            tunnel.ModeAmneziaWG,
-			protocolVersion: e.config.TunnelProfile.ProtocolVersion,
-			profileRevision: e.config.TunnelProfile.Revision,
+			mode:            mode,
+			protocolVersion: peerConfig.GetTunnelProtocolVersion(),
+			profileRevision: peerConfig.GetTunnelProfileRevision(),
 		}, nil
 	}
 	return peerTunnelState{mode: tunnel.ModeStandard}, nil
@@ -2007,25 +2011,72 @@ func (e *Engine) targetPeerTunnelState(
 ) (peerTunnelState, bool, error) {
 	switch peerConfig.GetTunnelMode() {
 	case mgmProto.TunnelMode_TunnelModeStandard:
-		if peerConfig.GetTunnelProfileRevision() != 0 {
+		hasTransition := peerConfig.GetTunnelTransitionId() != "" ||
+			peerConfig.GetTunnelEffectiveAt() != nil
+		if !hasTransition &&
+			(peerConfig.GetTunnelProfileRevision() != 0 ||
+				peerConfig.GetTunnelProtocolVersion() != "") {
 			return peerTunnelState{}, false, errors.New(
-				"standard peer has a non-zero tunnel profile revision",
+				"immediate standard peer contains AWG profile metadata",
 			)
+		}
+		if hasTransition {
+			profile := e.config.TunnelProfile
+			if profile == nil {
+				return peerTunnelState{}, false, errors.New(
+					"scheduled standard transition has no local tunnel profile",
+				)
+			}
+			mode, err := tunnelModeForProtocol(
+				peerConfig.GetTunnelProtocolVersion(),
+			)
+			if err != nil {
+				return peerTunnelState{}, false, err
+			}
+			if !profile.SupportsMode(mode) {
+				return peerTunnelState{}, false, fmt.Errorf(
+					"local profile %q does not support rollback protocol %q",
+					profile.ProtocolVersion,
+					peerConfig.GetTunnelProtocolVersion(),
+				)
+			}
+			if peerConfig.GetTunnelProfileRevision() != profile.Revision {
+				return peerTunnelState{}, false, fmt.Errorf(
+					"rollback profile revision %d does not match local revision %d",
+					peerConfig.GetTunnelProfileRevision(),
+					profile.Revision,
+				)
+			}
 		}
 		return transitionState(tunnel.ModeStandard, "", 0, peerConfig, now)
 
-	case mgmProto.TunnelMode_TunnelModeAmneziaWG:
+	case mgmProto.TunnelMode_TunnelModeAmneziaWG,
+		mgmProto.TunnelMode_TunnelModeAmneziaWG3:
 		profile := e.config.TunnelProfile
 		if profile == nil {
 			return peerTunnelState{}, false, errors.New(
 				"AmneziaWG peer received without a local tunnel profile",
 			)
 		}
-		if peerConfig.GetTunnelProtocolVersion() != profile.ProtocolVersion {
+		mode := tunnel.ModeAmneziaWG2
+		expectedProtocol := tunnel.ProtocolAmneziaWG2
+		if peerConfig.GetTunnelMode() == mgmProto.TunnelMode_TunnelModeAmneziaWG3 {
+			mode = tunnel.ModeAmneziaWG3
+			expectedProtocol = tunnel.ProtocolAmneziaWG3
+		}
+		if !profile.SupportsMode(mode) {
 			return peerTunnelState{}, false, fmt.Errorf(
-				"peer protocol %q does not match local protocol %q",
-				peerConfig.GetTunnelProtocolVersion(),
+				"local profile %q does not support tunnel mode %d",
 				profile.ProtocolVersion,
+				mode,
+			)
+		}
+		if peerConfig.GetTunnelProtocolVersion() != expectedProtocol {
+			return peerTunnelState{}, false, fmt.Errorf(
+				"tunnel mode %d requires protocol %q, got %q",
+				mode,
+				expectedProtocol,
+				peerConfig.GetTunnelProtocolVersion(),
 			)
 		}
 		if peerConfig.GetTunnelProfileRevision() != profile.Revision {
@@ -2036,8 +2087,8 @@ func (e *Engine) targetPeerTunnelState(
 			)
 		}
 		return transitionState(
-			tunnel.ModeAmneziaWG,
-			profile.ProtocolVersion,
+			mode,
+			expectedProtocol,
 			profile.Revision,
 			peerConfig,
 			now,
@@ -2061,7 +2112,7 @@ func transitionState(
 	transitionID := peerConfig.GetTunnelTransitionId()
 	effectiveAt := peerConfig.GetTunnelEffectiveAt()
 	if transitionID == "" && effectiveAt == nil {
-		if mode == tunnel.ModeAmneziaWG {
+		if mode != tunnel.ModeStandard {
 			return peerTunnelState{}, false, errors.New(
 				"AmneziaWG transition metadata is missing",
 			)
@@ -2087,6 +2138,20 @@ func transitionState(
 		effectiveAt:     effectiveTime.UnixNano(),
 	}
 	return state, effectiveTime.After(now), nil
+}
+
+func tunnelModeForProtocol(protocolVersion string) (tunnel.Mode, error) {
+	switch protocolVersion {
+	case tunnel.ProtocolAmneziaWG2:
+		return tunnel.ModeAmneziaWG2, nil
+	case tunnel.ProtocolAmneziaWG3:
+		return tunnel.ModeAmneziaWG3, nil
+	default:
+		return tunnel.ModeStandard, fmt.Errorf(
+			"unsupported tunnel protocol %q",
+			protocolVersion,
+		)
+	}
 }
 
 func (e *Engine) syncPeerTunnelTransitions(

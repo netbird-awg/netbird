@@ -63,8 +63,41 @@ func tunnelProfileUAPI(profile *tunnel.Profile) (string, error) {
 	fmt.Fprintf(&builder, "i2=%s\n", parameters.IPacket2)
 	fmt.Fprintf(&builder, "i3=%s\n", parameters.IPacket3)
 	fmt.Fprintf(&builder, "i4=%s\n", parameters.IPacket4)
-	fmt.Fprintf(&builder, "i5=%s\n\n", parameters.IPacket5)
+	fmt.Fprintf(&builder, "i5=%s\n", parameters.IPacket5)
+	if profile.ProtocolVersion == tunnel.ProtocolAmneziaWG3 {
+		fmt.Fprintf(
+			&builder,
+			"header_protection_key=%s\n",
+			hex.EncodeToString(profile.HeaderProtectionKey[:]),
+		)
+		writeOptionalUAPILine(
+			&builder,
+			"content_padding_addition",
+			profile.AWG3.ContentPaddingAddition,
+		)
+		writeOptionalUAPILine(
+			&builder,
+			"awg_persistent_keepalive_interval",
+			profile.AWG3.PersistentKeepaliveInterval,
+		)
+		writeOptionalUAPILine(&builder, "rekey_after_time", profile.AWG3.RekeyAfterTime)
+		writeOptionalUAPILine(&builder, "rekey_timeout", profile.AWG3.RekeyTimeout)
+		writeOptionalUAPILine(&builder, "reject_after_time", profile.AWG3.RejectAfterTime)
+		writeOptionalUAPILine(&builder, "keepalive_timeout", profile.AWG3.KeepaliveTimeout)
+		writeOptionalUAPILine(
+			&builder,
+			"max_handshake_attempts",
+			profile.AWG3.MaxHandshakeAttempts,
+		)
+	}
+	builder.WriteByte('\n')
 	return builder.String(), nil
+}
+
+func writeOptionalUAPILine(builder *strings.Builder, key, value string) {
+	if value != "" {
+		fmt.Fprintf(builder, "%s=%s\n", key, value)
+	}
 }
 
 func peerTunnelModeUAPI(
@@ -81,7 +114,7 @@ func peerTunnelModeUAPI(
 		if profileRevision != 0 {
 			return "", errors.New("standard peer profile revision must be zero")
 		}
-	case tunnel.ModeAmneziaWG:
+	case tunnel.ModeAmneziaWG2, tunnel.ModeAmneziaWG3:
 		if profileRevision == 0 {
 			return "", errors.New("AmneziaWG peer profile revision must be positive")
 		}

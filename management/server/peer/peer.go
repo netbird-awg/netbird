@@ -248,6 +248,7 @@ func (p *Peer) ToComponent() *sharedTypes.ComponentPeer {
 		LoginExpirationEnabled: p.LoginExpirationEnabled,
 		AddedWithSSOLogin:      p.AddedWithSSOLogin(),
 		SupportsHybridAWG2:     p.SupportsHybridAmneziaWG2(),
+		SupportsHybridAWG3:     p.SupportsHybridAmneziaWG3(),
 		TunnelRuntime: sharedTypes.TunnelRuntimeInfo{
 			ProtocolVersion:   p.Meta.TunnelRuntime.ProtocolVersion,
 			ProfileRevision:   p.Meta.TunnelRuntime.ProfileRevision,
@@ -293,6 +294,12 @@ func (p *Peer) SupportsComponentNetworkMap() bool {
 // WireGuard and AWG2 peers in one userspace device.
 func (p *Peer) SupportsHybridAmneziaWG2() bool {
 	return p.HasCapability(PeerCapabilityHybridAmneziaWG2)
+}
+
+// SupportsHybridAmneziaWG3 reports whether the peer supports AWG3 while
+// retaining per-peer standard WireGuard and AWG2 modes.
+func (p *Peer) SupportsHybridAmneziaWG3() bool {
+	return p.HasCapability(PeerCapabilityHybridAmneziaWG3)
 }
 
 func capabilitiesEqual(a, b []int32) bool {

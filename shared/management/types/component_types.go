@@ -27,6 +27,7 @@ type ComponentPeer struct {
 	AddedWithSSOLogin      bool
 	LastLogin              time.Time
 	SupportsHybridAWG2     bool
+	SupportsHybridAWG3     bool
 	TunnelRuntime          TunnelRuntimeInfo
 }
 

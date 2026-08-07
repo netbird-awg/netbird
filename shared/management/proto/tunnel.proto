@@ -12,6 +12,7 @@ enum TunnelMode {
   TunnelModeStandard = 0;
   TunnelModeAmneziaWG = 1;
   TunnelModeBlocked = 2;
+  TunnelModeAmneziaWG3 = 3;
 }
 
 // TunnelRuntimeMeta reports whether the client loaded its assigned tunnel
@@ -32,6 +33,7 @@ message TunnelProfile {
   uint64 revision = 2;
   bytes parameters = 3;
   google.protobuf.Timestamp server_time = 4;
+  bytes header_protection_key = 5;
 }
 
 // PeerTunnelConfigCompact carries a server-computed, receiver-specific tunnel

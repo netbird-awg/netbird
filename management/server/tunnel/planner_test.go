@@ -1,10 +1,12 @@
 package tunnel
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 	"time"
 
+	clienttunnel "github.com/netbirdio/netbird/client/iface/tunnel"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/shared/management/proto"
 	sharedtypes "github.com/netbirdio/netbird/shared/management/types"
@@ -84,6 +86,28 @@ func TestPlanPeerConfigsBlocksRevisionMismatch(t *testing.T) {
 	}
 }
 
+func TestPlanPeerConfigsKeepsStandardDuringProfileRotation(t *testing.T) {
+	now := time.Now().UTC()
+	settings := plannerSettings(now)
+	settings.TunnelProfile.Revision = 8
+	left := plannerPeer("left", now.Add(-time.Minute))
+	right := plannerPeer("right", now.Add(-time.Minute))
+
+	config := PlanPeerConfigs(
+		left,
+		[]*sharedtypes.ComponentPeer{right},
+		settings,
+		nil,
+		now,
+	)[right.ID]
+
+	if config.Mode != proto.TunnelMode_TunnelModeStandard ||
+		config.TransitionID != "" ||
+		config.EffectiveAt != nil {
+		t.Fatalf("profile rotation did not stay standard: %+v", config)
+	}
+}
+
 func TestProfileForPeerUsesResponseTime(t *testing.T) {
 	now := time.Now().UTC()
 	settings := plannerSettings(now.Add(-time.Minute))
@@ -95,6 +119,132 @@ func TestProfileForPeerUsesResponseTime(t *testing.T) {
 	}
 	if !profile.GetServerTime().AsTime().Equal(now) {
 		t.Fatalf("server time = %s, want %s", profile.GetServerTime().AsTime(), now)
+	}
+}
+
+func TestPendingProfileIsDistributedWithoutActivation(t *testing.T) {
+	now := time.Now().UTC()
+	settings := plannerSettings(now.Add(-time.Minute))
+	pendingSettings := plannerAWG3Settings(now)
+	settings.TunnelProfilePending = pendingSettings.TunnelProfile
+	peer := plannerAWG3Peer("peer", now)
+
+	profile := ProfileForPeer(peer, settings, now)
+	if profile == nil || profile.GetProtocolVersion() !=
+		clienttunnel.ProtocolAmneziaWG3 {
+		t.Fatalf("pending profile was not distributed: %+v", profile)
+	}
+
+	config := PlanPeerConfigs(
+		peer,
+		[]*sharedtypes.ComponentPeer{
+			plannerAWG3Peer("remote", now),
+		},
+		settings,
+		nil,
+		now,
+	)["remote"]
+	if config.Mode != proto.TunnelMode_TunnelModeStandard {
+		t.Fatalf("pending profile activated before approval: %+v", config)
+	}
+}
+
+func TestPendingProfileBlocksRequireAWGUntilActivation(t *testing.T) {
+	now := time.Now().UTC()
+	settings := plannerSettings(now.Add(-time.Minute))
+	settings.TunnelPolicy = types.TunnelAccountPolicyRequireAWG
+	settings.TunnelProfilePending = plannerAWG3Settings(now).TunnelProfile
+	peer := plannerAWG3Peer("peer", now)
+
+	config := PlanPeerConfigs(
+		peer,
+		[]*sharedtypes.ComponentPeer{
+			plannerAWG3Peer("remote", now),
+		},
+		settings,
+		nil,
+		now,
+	)["remote"]
+	if config.Mode != proto.TunnelMode_TunnelModeBlocked {
+		t.Fatalf("required AWG used a pending profile: %+v", config)
+	}
+}
+
+func TestPlanPeerConfigsUsesAWG3ForTwoAWG3Peers(t *testing.T) {
+	now := time.Now().UTC()
+	settings := plannerAWG3Settings(now.Add(-time.Minute))
+	left := plannerAWG3Peer("left", now.Add(-time.Minute))
+	right := plannerAWG3Peer("right", now.Add(-time.Minute))
+
+	config := PlanPeerConfigs(
+		left,
+		[]*sharedtypes.ComponentPeer{right},
+		settings,
+		nil,
+		now,
+	)[right.ID]
+
+	if config.Mode != proto.TunnelMode_TunnelModeAmneziaWG3 ||
+		config.ProtocolVersion != clienttunnel.ProtocolAmneziaWG3 {
+		t.Fatalf("unexpected AWG3 config: %+v", config)
+	}
+}
+
+func TestPlanPeerConfigsUsesAWG2ForMixedPeers(t *testing.T) {
+	now := time.Now().UTC()
+	settings := plannerAWG3Settings(now.Add(-time.Minute))
+	left := plannerAWG3Peer("left", now.Add(-time.Minute))
+	right := plannerPeer("right", now.Add(-time.Minute))
+
+	config := PlanPeerConfigs(
+		left,
+		[]*sharedtypes.ComponentPeer{right},
+		settings,
+		nil,
+		now,
+	)[right.ID]
+
+	if config.Mode != proto.TunnelMode_TunnelModeAmneziaWG ||
+		config.ProtocolVersion != clienttunnel.ProtocolAmneziaWG2 {
+		t.Fatalf("unexpected mixed-version config: %+v", config)
+	}
+}
+
+func TestProfileForPeerKeepsAWG3SecretOutOfAWG2Profile(t *testing.T) {
+	now := time.Now().UTC()
+	settings := plannerAWG3Settings(now.Add(-time.Minute))
+
+	awg3Profile := ProfileForPeer(
+		plannerAWG3Peer("awg3", now),
+		settings,
+		now,
+	)
+	if awg3Profile == nil {
+		t.Fatal("AWG3 peer did not receive a profile")
+	}
+	if !bytes.Equal(
+		awg3Profile.GetHeaderProtectionKey(),
+		settings.TunnelProfile.HeaderProtectionKey,
+	) {
+		t.Fatal("AWG3 peer did not receive the header protection key")
+	}
+
+	awg2Profile := ProfileForPeer(plannerPeer("awg2", now), settings, now)
+	if awg2Profile == nil {
+		t.Fatal("AWG2 peer did not receive a downgraded profile")
+	}
+	if awg2Profile.GetProtocolVersion() != clienttunnel.ProtocolAmneziaWG2 {
+		t.Fatalf("downgraded protocol = %q", awg2Profile.GetProtocolVersion())
+	}
+	if len(awg2Profile.GetHeaderProtectionKey()) != 0 {
+		t.Fatal("AWG2 peer received an AWG3 header protection key")
+	}
+	var parameters map[string]interface{}
+	if err := json.Unmarshal(awg2Profile.GetParameters(), &parameters); err != nil {
+		t.Fatalf("decode downgraded parameters: %v", err)
+	}
+	if _, ok := parameters["content_padding_addition"]; ok {
+		t.Fatal("AWG2 peer received AWG3-only parameters")
 	}
 }
 
@@ -196,6 +346,42 @@ func plannerPeer(id string, readyAt time.Time) *sharedtypes.ComponentPeer {
 			Ready:             true,
 			UpdatedAt:         readyAt,
 			LastReadyProtocol: "awg2",
+			LastReadyRevision: 7,
+			LastReadyAt:       readyAt,
+		},
+	}
+}
+
+func plannerAWG3Settings(updatedAt time.Time) *types.Settings {
+	return &types.Settings{
+		TunnelPolicy:          types.TunnelAccountPolicyPreferAWG,
+		TunnelPolicyUpdatedAt: updatedAt,
+		TunnelProfile: &types.TunnelProfile{
+			ProtocolVersion: clienttunnel.ProtocolAmneziaWG3,
+			Revision:        7,
+			Parameters: json.RawMessage(
+				`{"s1":12,"s2":12,"s3":12,"s4":12,` +
+					`"h1":"101","h2":"102","h3":"103","h4":"104",` +
+					`"content_padding_addition":"1-16"}`,
+			),
+			UpdatedAt:           updatedAt,
+			HeaderProtectionKey: bytes.Repeat([]byte{0x5a}, 32),
+		},
+	}
+}
+
+func plannerAWG3Peer(id string, readyAt time.Time) *sharedtypes.ComponentPeer {
+	return &sharedtypes.ComponentPeer{
+		ID:                 id,
+		SupportsHybridAWG2: true,
+		SupportsHybridAWG3: true,
+		TunnelRuntime: sharedtypes.TunnelRuntimeInfo{
+			ProtocolVersion:   clienttunnel.ProtocolAmneziaWG3,
+			ProfileRevision:   7,
+			AdapterRevision:   HybridAWG3AdapterRevision,
+			Ready:             true,
+			UpdatedAt:         readyAt,
+			LastReadyProtocol: clienttunnel.ProtocolAmneziaWG3,
 			LastReadyRevision: 7,
 			LastReadyAt:       readyAt,
 		},

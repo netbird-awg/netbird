@@ -103,6 +103,14 @@ type Settings struct {
 	TunnelPolicyUpdatedAt time.Time
 	// TunnelProfile is the active Hybrid AWG profile.
 	TunnelProfile *TunnelProfile `gorm:"serializer:json"`
+	// TunnelProfilePending is distributed for readiness before activation.
+	TunnelProfilePending *TunnelProfile `gorm:"serializer:json"`
+	// TunnelProfilePrevious is retained temporarily for explicit rollback.
+	TunnelProfilePrevious *TunnelProfile `gorm:"serializer:json"`
+	// TunnelProfileGraceUntil bounds the rollback window.
+	TunnelProfileGraceUntil time.Time
+	// TunnelProfileAction carries a REST update command and is never persisted.
+	TunnelProfileAction TunnelProfileAction `json:"-" gorm:"-"`
 }
 
 // Copy copies the Settings struct
@@ -138,13 +146,12 @@ func (s *Settings) Copy() *Settings {
 		TunnelPolicyUpdatedAt:           s.TunnelPolicyUpdatedAt,
 	}
 	if s.TunnelProfile != nil {
-		settings.TunnelProfile = &TunnelProfile{
-			ProtocolVersion: s.TunnelProfile.ProtocolVersion,
-			Revision:        s.TunnelProfile.Revision,
-			Parameters:      slices.Clone(s.TunnelProfile.Parameters),
-			UpdatedAt:       s.TunnelProfile.UpdatedAt,
-		}
+		settings.TunnelProfile = s.TunnelProfile.Copy()
 	}
+	settings.TunnelProfilePending = s.TunnelProfilePending.Copy()
+	settings.TunnelProfilePrevious = s.TunnelProfilePrevious.Copy()
+	settings.TunnelProfileGraceUntil = s.TunnelProfileGraceUntil
+	settings.TunnelProfileAction = s.TunnelProfileAction
 	if s.Extra != nil {
 		settings.Extra = s.Extra.Copy()
 	}

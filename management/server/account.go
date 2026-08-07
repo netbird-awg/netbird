@@ -53,6 +53,7 @@ import (
 	"github.com/netbirdio/netbird/route"
 	nbdomain "github.com/netbirdio/netbird/shared/management/domain"
 	"github.com/netbirdio/netbird/shared/management/status"
+	sharedtypes "github.com/netbirdio/netbird/shared/management/types"
 )
 
 const (
@@ -311,10 +312,37 @@ func (am *DefaultAccountManager) UpdateAccountSettings(ctx context.Context, acco
 			return err
 		}
 
+		var tunnelPeers []*sharedtypes.ComponentPeer
+		if newSettings.TunnelProfileAction ==
+			types.TunnelProfileActionActivate {
+			peers, err := transaction.GetAccountPeers(
+				ctx,
+				store.LockingStrengthNone,
+				accountID,
+				"",
+				"",
+			)
+			if err != nil {
+				return fmt.Errorf(
+					"get peers for tunnel profile activation: %w",
+					err,
+				)
+			}
+			tunnelPeers = make(
+				[]*sharedtypes.ComponentPeer,
+				0,
+				len(peers),
+			)
+			for _, peer := range peers {
+				tunnelPeers = append(tunnelPeers, peer.ToComponent())
+			}
+		}
+
 		tunnelSettingsChanged, err := managementtunnel.PrepareSettingsUpdate(
 			newSettings,
 			oldSettings,
 			time.Now().UTC(),
+			tunnelPeers,
 		)
 		if err != nil {
 			return status.Errorf(status.InvalidArgument, "%s", err)

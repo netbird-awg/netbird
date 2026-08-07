@@ -3,12 +3,14 @@ package tunnel
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	clienttunnel "github.com/netbirdio/netbird/client/iface/tunnel"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/shared/management/proto"
 	sharedtypes "github.com/netbirdio/netbird/shared/management/types"
@@ -17,6 +19,8 @@ import (
 const (
 	// HybridAWG2AdapterRevision identifies the reviewed wireguard-go fork.
 	HybridAWG2AdapterRevision = "2ae1edae71cfa2d5a3265e3d8e316f0a5914944f"
+	// HybridAWG3AdapterRevision identifies the reviewed AWG3-capable fork.
+	HybridAWG3AdapterRevision = clienttunnel.AdapterRevision
 	pairTransitionDelay       = 30 * time.Second
 )
 
@@ -64,17 +68,40 @@ func ProfileForPeer(
 	now time.Time,
 ) *proto.TunnelProfile {
 	if peer == nil ||
-		!peer.SupportsHybridAWG2 ||
 		settings == nil ||
-		settings.TunnelProfile == nil {
+		effectiveTunnelProfile(settings) == nil {
 		return nil
 	}
-	profile := settings.TunnelProfile
+	profile := effectiveTunnelProfile(settings)
+	protocolVersion := assignedProtocol(peer, profile)
+	if protocolVersion == "" {
+		return nil
+	}
+	parameters := slices.Clone(profile.Parameters)
+	var headerProtectionKey []byte
+	if protocolVersion == clienttunnel.ProtocolAmneziaWG3 {
+		headerProtectionKey = slices.Clone(profile.HeaderProtectionKey)
+	} else if profile.ProtocolVersion == clienttunnel.ProtocolAmneziaWG3 {
+		decoded, err := clienttunnel.DecodeProfileWithHeaderKey(
+			profile.ProtocolVersion,
+			profile.Revision,
+			profile.Parameters,
+			profile.HeaderProtectionKey,
+		)
+		if err != nil {
+			return nil
+		}
+		parameters, err = json.Marshal(decoded.AWG2)
+		if err != nil {
+			return nil
+		}
+	}
 	return &proto.TunnelProfile{
-		ProtocolVersion: profile.ProtocolVersion,
-		Revision:        profile.Revision,
-		Parameters:      slices.Clone(profile.Parameters),
-		ServerTime:      timestamppb.New(now),
+		ProtocolVersion:     protocolVersion,
+		Revision:            profile.Revision,
+		Parameters:          parameters,
+		ServerTime:          timestamppb.New(now),
+		HeaderProtectionKey: headerProtectionKey,
 	}
 }
 
@@ -91,7 +118,14 @@ func planPeerPair(
 	}
 	leftPolicy := userPolicy(left.UserID, userPolicies)
 	rightPolicy := userPolicy(right.UserID, userPolicies)
-	profile := settings.TunnelProfile
+	profile := effectiveTunnelProfile(settings)
+
+	if settings.TunnelProfilePending != nil {
+		if accountPolicy == types.TunnelAccountPolicyRequireAWG {
+			return PeerConfig{Mode: proto.TunnelMode_TunnelModeBlocked}
+		}
+		return PeerConfig{Mode: proto.TunnelMode_TunnelModeStandard}
+	}
 
 	leftState := plannerPeerState(left, leftPolicy, profile)
 	rightState := plannerPeerState(right, rightPolicy, profile)
@@ -100,12 +134,14 @@ func planPeerPair(
 	if decision.Blocked {
 		return PeerConfig{Mode: proto.TunnelMode_TunnelModeBlocked}
 	}
-	if decision.Mode == proto.TunnelMode_TunnelModeAmneziaWG {
+	if decision.Mode == proto.TunnelMode_TunnelModeAmneziaWG ||
+		decision.Mode == proto.TunnelMode_TunnelModeAmneziaWG3 {
 		return awgPeerConfig(
 			left,
 			right,
 			settings,
 			userPolicies,
+			decision.Mode,
 			decision.Pending,
 		)
 	}
@@ -118,24 +154,44 @@ func planPeerPair(
 	)
 }
 
+func effectiveTunnelProfile(settings *types.Settings) *types.TunnelProfile {
+	if settings == nil {
+		return nil
+	}
+	if settings.TunnelProfilePending != nil {
+		return settings.TunnelProfilePending
+	}
+	return settings.TunnelProfile
+}
+
 func plannerPeerState(
 	peer *sharedtypes.ComponentPeer,
 	policy UserPolicy,
 	profile *types.TunnelProfile,
 ) PeerState {
 	runtime := peer.TunnelRuntime
+	protocolVersion := assignedProtocol(peer, profile)
+	var profileRevision uint64
+	if profile != nil {
+		profileRevision = profile.Revision
+	}
 	ready := profile != nil &&
+		protocolVersion != "" &&
 		runtime.Ready &&
-		!runtime.UpdatedAt.IsZero() &&
-		runtime.ProtocolVersion == profile.ProtocolVersion &&
-		runtime.ProfileRevision == profile.Revision &&
-		runtime.AdapterRevision == HybridAWG2AdapterRevision
+		!runtime.UpdatedAt.IsZero()
 	return PeerState{
 		SupportsHybridAWG2: peer.SupportsHybridAWG2,
+		SupportsHybridAWG3: peer.SupportsHybridAWG3,
 		Ready:              ready,
+		AssignedProtocol:   protocolVersion,
+		AssignedRevision:   profileRevision,
 		ProtocolVersion:    runtime.ProtocolVersion,
 		ProfileRevision:    runtime.ProfileRevision,
-		UserPolicy:         policy,
+		AdapterCompatible: adapterSupportsProtocol(
+			runtime.AdapterRevision,
+			protocolVersion,
+		),
+		UserPolicy: policy,
 	}
 }
 
@@ -146,8 +202,6 @@ func previousPairMode(
 	now time.Time,
 ) proto.TunnelMode {
 	if profile == nil ||
-		left.TunnelRuntime.LastReadyProtocol != profile.ProtocolVersion ||
-		right.TunnelRuntime.LastReadyProtocol != profile.ProtocolVersion ||
 		left.TunnelRuntime.LastReadyRevision != profile.Revision ||
 		right.TunnelRuntime.LastReadyRevision != profile.Revision {
 		return proto.TunnelMode_TunnelModeStandard
@@ -160,7 +214,12 @@ func previousPairMode(
 	if effectiveAt.After(now) {
 		return proto.TunnelMode_TunnelModeStandard
 	}
-	return proto.TunnelMode_TunnelModeAmneziaWG
+	return modeForReadyProtocols(
+		left,
+		right,
+		left.TunnelRuntime.LastReadyProtocol,
+		right.TunnelRuntime.LastReadyProtocol,
+	)
 }
 
 func awgPeerConfig(
@@ -168,6 +227,7 @@ func awgPeerConfig(
 	right *sharedtypes.ComponentPeer,
 	settings *types.Settings,
 	userPolicies map[string]sharedtypes.TunnelUserPolicyInfo,
+	mode proto.TunnelMode,
 	pending bool,
 ) PeerConfig {
 	profile := settings.TunnelProfile
@@ -191,13 +251,13 @@ func awgPeerConfig(
 		).Add(transitionDelay)
 	}
 	return PeerConfig{
-		Mode:            proto.TunnelMode_TunnelModeAmneziaWG,
-		ProtocolVersion: profile.ProtocolVersion,
+		Mode:            mode,
+		ProtocolVersion: protocolForMode(mode),
 		ProfileRevision: profile.Revision,
 		TransitionID: transitionID(
 			left,
 			right,
-			proto.TunnelMode_TunnelModeAmneziaWG,
+			mode,
 			profile.Revision,
 			effectiveAt,
 		),
@@ -212,10 +272,15 @@ func standardPeerConfig(
 	userPolicies map[string]sharedtypes.TunnelUserPolicyInfo,
 	currentMode proto.TunnelMode,
 ) PeerConfig {
-	if !left.SupportsHybridAWG2 || !right.SupportsHybridAWG2 {
+	if settings.TunnelProfile == nil {
 		return PeerConfig{Mode: proto.TunnelMode_TunnelModeStandard}
 	}
-	if currentMode != proto.TunnelMode_TunnelModeAmneziaWG {
+	if highestCommonMode(plannerPeerState(left, UserPolicyInherit, settings.TunnelProfile),
+		plannerPeerState(right, UserPolicyInherit, settings.TunnelProfile)) ==
+		proto.TunnelMode_TunnelModeStandard {
+		return PeerConfig{Mode: proto.TunnelMode_TunnelModeStandard}
+	}
+	if currentMode == proto.TunnelMode_TunnelModeStandard {
 		return PeerConfig{Mode: proto.TunnelMode_TunnelModeStandard}
 	}
 	anchor := maxTime(
@@ -228,7 +293,9 @@ func standardPeerConfig(
 	}
 	effectiveAt := anchor.Add(pairTransitionDelay)
 	return PeerConfig{
-		Mode: proto.TunnelMode_TunnelModeStandard,
+		Mode:            proto.TunnelMode_TunnelModeStandard,
+		ProtocolVersion: protocolForMode(currentMode),
+		ProfileRevision: settings.TunnelProfile.Revision,
 		TransitionID: transitionID(
 			left,
 			right,
@@ -237,6 +304,64 @@ func standardPeerConfig(
 			effectiveAt,
 		),
 		EffectiveAt: timestamppb.New(effectiveAt),
+	}
+}
+
+func assignedProtocol(
+	peer *sharedtypes.ComponentPeer,
+	profile *types.TunnelProfile,
+) string {
+	if peer == nil || profile == nil {
+		return ""
+	}
+	if profile.ProtocolVersion == clienttunnel.ProtocolAmneziaWG3 &&
+		peer.SupportsHybridAWG3 {
+		return clienttunnel.ProtocolAmneziaWG3
+	}
+	if peer.SupportsHybridAWG2 {
+		return clienttunnel.ProtocolAmneziaWG2
+	}
+	return ""
+}
+
+func adapterSupportsProtocol(adapterRevision, protocolVersion string) bool {
+	switch protocolVersion {
+	case clienttunnel.ProtocolAmneziaWG3:
+		return adapterRevision == HybridAWG3AdapterRevision
+	case clienttunnel.ProtocolAmneziaWG2:
+		return adapterRevision == HybridAWG2AdapterRevision ||
+			adapterRevision == HybridAWG3AdapterRevision
+	default:
+		return false
+	}
+}
+
+func modeForReadyProtocols(
+	left,
+	right *sharedtypes.ComponentPeer,
+	leftProtocol,
+	rightProtocol string,
+) proto.TunnelMode {
+	if left.SupportsHybridAWG3 && right.SupportsHybridAWG3 &&
+		leftProtocol == clienttunnel.ProtocolAmneziaWG3 &&
+		rightProtocol == clienttunnel.ProtocolAmneziaWG3 {
+		return proto.TunnelMode_TunnelModeAmneziaWG3
+	}
+	if left.SupportsHybridAWG2 && right.SupportsHybridAWG2 &&
+		supportsAWG2Profile(leftProtocol) && supportsAWG2Profile(rightProtocol) {
+		return proto.TunnelMode_TunnelModeAmneziaWG
+	}
+	return proto.TunnelMode_TunnelModeStandard
+}
+
+func protocolForMode(mode proto.TunnelMode) string {
+	switch mode {
+	case proto.TunnelMode_TunnelModeAmneziaWG:
+		return clienttunnel.ProtocolAmneziaWG2
+	case proto.TunnelMode_TunnelModeAmneziaWG3:
+		return clienttunnel.ProtocolAmneziaWG3
+	default:
+		return ""
 	}
 }
 

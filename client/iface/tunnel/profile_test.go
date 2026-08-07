@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -68,6 +69,95 @@ func TestDecodeProfileRejectsOversizedInput(t *testing.T) {
 
 	if _, err := DecodeProfile(ProtocolAmneziaWG2, 1, raw); err == nil {
 		t.Fatal("oversized profile was accepted")
+	}
+}
+
+func TestDecodeAWG3Profile(t *testing.T) {
+	parameters := validParameters()
+	parameters.InitiationPadding = headerProtectionNonceSize
+	parameters.ResponsePadding = headerProtectionNonceSize
+	parameters.CookiePadding = headerProtectionNonceSize
+	parameters.TransportPadding = headerProtectionNonceSize
+	raw, err := json.Marshal(awg3WireParameters{
+		AWG2Parameters: parameters,
+		AWG3Parameters: AWG3Parameters{
+			ContentPaddingAddition:      "1-32",
+			PersistentKeepaliveInterval: "20-30",
+			RekeyAfterTime:              "120-180",
+			MaxHandshakeAttempts:        "5-10",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := bytes.Repeat([]byte{0x37}, headerProtectionKeySize)
+
+	profile, err := DecodeProfileWithHeaderKey(
+		ProtocolAmneziaWG3,
+		8,
+		raw,
+		key,
+	)
+	if err != nil {
+		t.Fatalf("decode valid AWG3 profile: %v", err)
+	}
+	if !profile.SupportsMode(ModeAmneziaWG2) ||
+		!profile.SupportsMode(ModeAmneziaWG3) {
+		t.Fatal("AWG3 profile does not support both AWG modes")
+	}
+}
+
+func TestDecodeAWG3ProfileRejectsMissingHeaderKey(t *testing.T) {
+	parameters := validParameters()
+	parameters.InitiationPadding = headerProtectionNonceSize
+	parameters.ResponsePadding = headerProtectionNonceSize
+	parameters.CookiePadding = headerProtectionNonceSize
+	parameters.TransportPadding = headerProtectionNonceSize
+	raw, err := json.Marshal(parameters)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := DecodeProfile(
+		ProtocolAmneziaWG3,
+		1,
+		raw,
+	); err == nil {
+		t.Fatal("AWG3 profile without a header key was accepted")
+	}
+}
+
+func TestDecodeAWG2ProfileRejectsAWG3Parameters(t *testing.T) {
+	parameters := validParameters()
+	raw, err := json.Marshal(awg3WireParameters{
+		AWG2Parameters: parameters,
+		AWG3Parameters: AWG3Parameters{
+			ContentPaddingAddition: "1-32",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := DecodeProfile(ProtocolAmneziaWG2, 1, raw); err == nil {
+		t.Fatal("AWG2 profile with AWG3 parameters was accepted")
+	}
+}
+
+func TestDecodeAWG2ProfileRejectsAWG3HeaderKey(t *testing.T) {
+	parameters := validParameters()
+	raw, err := json.Marshal(parameters)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := DecodeProfileWithHeaderKey(
+		ProtocolAmneziaWG2,
+		1,
+		raw,
+		bytes.Repeat([]byte{0x37}, headerProtectionKeySize),
+	); err == nil {
+		t.Fatal("AWG2 profile with an AWG3 header key was accepted")
 	}
 }
 

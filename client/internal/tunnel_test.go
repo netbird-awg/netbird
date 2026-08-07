@@ -101,10 +101,12 @@ func TestPeerTunnelStateKeepsAWGBeforeScheduledRollback(t *testing.T) {
 		peerTunnelStates: map[string]peerTunnelState{peerKey: current},
 	}
 	peer := &mgmProto.RemotePeerConfig{
-		WgPubKey:           peerKey,
-		TunnelMode:         mgmProto.TunnelMode_TunnelModeStandard,
-		TunnelTransitionId: "rollback-1",
-		TunnelEffectiveAt:  timestamppb.New(time.Now().Add(time.Minute)),
+		WgPubKey:              peerKey,
+		TunnelMode:            mgmProto.TunnelMode_TunnelModeStandard,
+		TunnelProtocolVersion: tunnel.ProtocolAmneziaWG2,
+		TunnelProfileRevision: 4,
+		TunnelTransitionId:    "rollback-1",
+		TunnelEffectiveAt:     timestamppb.New(time.Now().Add(time.Minute)),
 	}
 
 	state, err := engine.peerTunnelState(peer)
@@ -122,10 +124,12 @@ func TestPeerTunnelStateRestoresAWGBeforeRollbackAfterRestart(t *testing.T) {
 		peerTunnelStates: make(map[string]peerTunnelState),
 	}
 	peer := &mgmProto.RemotePeerConfig{
-		WgPubKey:           "peer-key",
-		TunnelMode:         mgmProto.TunnelMode_TunnelModeStandard,
-		TunnelTransitionId: "rollback-1",
-		TunnelEffectiveAt:  timestamppb.New(time.Now().Add(time.Minute)),
+		WgPubKey:              "peer-key",
+		TunnelMode:            mgmProto.TunnelMode_TunnelModeStandard,
+		TunnelProtocolVersion: tunnel.ProtocolAmneziaWG2,
+		TunnelProfileRevision: 4,
+		TunnelTransitionId:    "rollback-1",
+		TunnelEffectiveAt:     timestamppb.New(time.Now().Add(time.Minute)),
 	}
 
 	state, err := engine.peerTunnelState(peer)
@@ -135,6 +139,48 @@ func TestPeerTunnelStateRestoresAWGBeforeRollbackAfterRestart(t *testing.T) {
 	if state.mode != tunnel.ModeAmneziaWG ||
 		state.profileRevision != engine.config.TunnelProfile.Revision {
 		t.Fatalf("restart applied scheduled rollback early: %+v", state)
+	}
+}
+
+func TestPeerTunnelStateAWG3ProfileAcceptsAWG2Peer(t *testing.T) {
+	engine := &Engine{config: &EngineConfig{
+		TunnelProfile: testAWG3TunnelProfile(),
+	}}
+	peer := &mgmProto.RemotePeerConfig{
+		TunnelMode:            mgmProto.TunnelMode_TunnelModeAmneziaWG,
+		TunnelProtocolVersion: tunnel.ProtocolAmneziaWG2,
+		TunnelProfileRevision: 4,
+		TunnelTransitionId:    "transition-awg2",
+		TunnelEffectiveAt:     timestamppb.New(time.Now().Add(-time.Second)),
+	}
+
+	state, err := engine.peerTunnelState(peer)
+	if err != nil {
+		t.Fatalf("resolve AWG2 peer with AWG3 profile: %v", err)
+	}
+	if state.mode != tunnel.ModeAmneziaWG2 {
+		t.Fatalf("unexpected mixed-mode state: %+v", state)
+	}
+}
+
+func TestPeerTunnelStateAcceptsAWG3Peer(t *testing.T) {
+	engine := &Engine{config: &EngineConfig{
+		TunnelProfile: testAWG3TunnelProfile(),
+	}}
+	peer := &mgmProto.RemotePeerConfig{
+		TunnelMode:            mgmProto.TunnelMode_TunnelModeAmneziaWG3,
+		TunnelProtocolVersion: tunnel.ProtocolAmneziaWG3,
+		TunnelProfileRevision: 4,
+		TunnelTransitionId:    "transition-awg3",
+		TunnelEffectiveAt:     timestamppb.New(time.Now().Add(-time.Second)),
+	}
+
+	state, err := engine.peerTunnelState(peer)
+	if err != nil {
+		t.Fatalf("resolve AWG3 peer: %v", err)
+	}
+	if state.mode != tunnel.ModeAmneziaWG3 {
+		t.Fatalf("unexpected AWG3 state: %+v", state)
 	}
 }
 
@@ -149,4 +195,10 @@ func testTunnelProfile() *tunnel.Profile {
 			TransportHeader:  "104",
 		},
 	}
+}
+
+func testAWG3TunnelProfile() *tunnel.Profile {
+	profile := testTunnelProfile()
+	profile.ProtocolVersion = tunnel.ProtocolAmneziaWG3
+	return profile
 }
