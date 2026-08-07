@@ -823,6 +823,22 @@ jobs:
             netibird-awg_installer_test_windows_${{ matrix.arch }}.msi
           retention-days: 3
 
+      - name: Upload unsigned installers to fork prerelease
+        if: startsWith(github.ref, 'refs/tags/v') && github.repository != 'netbirdio/netbird'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $assets = @(
+            "netibird-awg_installer_test_windows_${{ matrix.arch }}.exe",
+            "netibird-awg_installer_test_windows_${{ matrix.arch }}.msi"
+          )
+          $checksum = "netibird-awg_installer_test_windows_${{ matrix.arch }}.sha256"
+          $assets | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_).Hash.ToLowerInvariant()
+            "$hash  $_"
+          } | Set-Content -Encoding ascii $checksum
+          gh release upload "${{ github.ref_name }}" @assets $checksum --clobber
+
   comment_release_artifacts:
     name: Comment release artifacts
     runs-on: ubuntu-latest
