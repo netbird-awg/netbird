@@ -474,6 +474,7 @@ checksum:
     - glob: ./infrastructure_files/migrate-to-enterprise.sh
 
 release:
+  prerelease: auto
   extra_files:
     - glob: ./infrastructure_files/getting-started-with-zitadel.sh
     - glob: ./release_files/install.sh

@@ -44,3 +44,5 @@ checksum:
   name_template: "{{ .ProjectName }}_darwin_checksums.txt"
 changelog:
   disable: true
+release:
+  prerelease: auto

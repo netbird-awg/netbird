@@ -136,7 +136,6 @@ uploads:
     target: https://pkgs.wiretrustee.com/debian/pool/{{ .ArtifactName }};deb.distribution=stable;deb.component=main;deb.architecture={{ if .Arm }}armhf{{ else }}{{ .Arch }}{{ end }};deb.package=
     username: dev@wiretrustee.com
     method: PUT
-
   - name: yum
     skip: "{{ .Env.SKIP_PUBLISH }}"
     ids:
@@ -145,3 +144,6 @@ uploads:
     target: https://pkgs.wiretrustee.com/yum/{{ .Arch }}{{ if .Arm }}{{ .Arm }}{{ end }}
     username: dev@wiretrustee.com
     method: PUT
+
+release:
+  prerelease: auto
