@@ -38,25 +38,32 @@ TAG_NAME=""
 get_release() {
     local RELEASE=$1
     if [ "$RELEASE" = "latest" ]; then
-        local TAG="latest"
-        local URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/latest"
+        local URL="https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=1"
     else
-        local TAG="tags/${RELEASE}"
-        local URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/${TAG}"
+        local URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/tags/${RELEASE}"
     fi
-	OUTPUT=""
+
+    OUTPUT=""
     if [ -n "$GITHUB_TOKEN" ]; then
-          OUTPUT=$(curl -H  "Authorization: token ${GITHUB_TOKEN}" -s "${URL}")
+        OUTPUT=$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" "${URL}")
     else
-          OUTPUT=$(curl -s "${URL}") 
+        OUTPUT=$(curl -fsSL "${URL}")
     fi
-	TAG_NAME=$(echo "${OUTPUT}" | grep -Eo '\"tag_name\":\s*\"v([0-9]+\.){2}[0-9]+"' | tail -n 1)
-	echo "${TAG_NAME}" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+'
+
+    TAG_NAME=$(printf '%s\n' "${OUTPUT}" |
+        grep -m 1 -Eo '"tag_name":[[:space:]]*"[^"]+"' |
+        cut -d '"' -f 4)
+    if ! printf '%s\n' "${TAG_NAME}" |
+        grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+        echo "No valid Netibird-AWG release was found" >&2
+        return 1
+    fi
+    printf '%s\n' "${TAG_NAME}"
 }
 
 download_release_binary() {
     VERSION=$(get_release "$NETBIRD_RELEASE")
-	echo "Using the following tag name for binary installation: ${TAG_NAME}"
+	echo "Using the following tag name for binary installation: ${VERSION}"
     BASE_URL="https://github.com/${OWNER}/${REPO}/releases/download"
     if [ "$1" = "$UI_APP" ]; then
        if [ "$OS_TYPE" = "darwin" ]; then
