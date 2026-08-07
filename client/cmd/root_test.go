@@ -39,6 +39,12 @@ func TestInitCommands(t *testing.T) {
 	}
 }
 
+func TestRootCommandUsesNetibirdAWGName(t *testing.T) {
+	if rootCmd.Use != "netibird-awg" {
+		t.Fatalf("expected Netibird-AWG command name, got %q", rootCmd.Use)
+	}
+}
+
 func TestSetFlagsFromEnvVars(t *testing.T) {
 	var cmd = &cobra.Command{
 		Use:          "netbird",

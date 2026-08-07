@@ -20,7 +20,7 @@ var forwardingRulesListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List forwarding rules",
-	Example: "  netbird forwarding list",
+	Example: "  netibird-awg forwarding list",
 	Long:    "Commands to list forwarding rules.",
 	RunE:    listForwardingRules,
 }

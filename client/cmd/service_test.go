@@ -123,3 +123,21 @@ func TestServiceConfigWithEnvVars(t *testing.T) {
 		assert.Equal(t, "test-service", cfg.EnvVars["SYSTEMD_UNIT"])
 	}
 }
+
+func TestServiceConfigUsesNetibirdAWGBrand(t *testing.T) {
+	originalServiceName := serviceName
+	originalServiceEnvVars := serviceEnvVars
+	defer func() {
+		serviceName = originalServiceName
+		serviceEnvVars = originalServiceEnvVars
+	}()
+
+	serviceName = "netibird-awg"
+	serviceEnvVars = nil
+
+	cfg, err := newSVCConfig()
+	require.NoError(t, err)
+
+	assert.Equal(t, "netibird-awg", cfg.Name, "Service name should match the process")
+	assert.Equal(t, "Netibird-AWG", cfg.DisplayName, "Service display name should match")
+}

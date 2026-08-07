@@ -1,4 +1,4 @@
-# Translating the NetBird UI
+# Translating the Netibird-AWG UI
 
 A short brief for translating the desktop UI — for any translator, human or AI agent (*"you"* = whoever's translating).
 
@@ -68,7 +68,7 @@ These are the usual ways a translation *breaks the app*, not just reads oddly.
 
 ## Glossary
 
-**Tier A — never translate (brands):** `NetBird` · `WireGuard®` · `Rosenpass` · `GitHub` · `ICE` · company/product names · sample URLs · version numbers.
+**Tier A — never translate (brands):** `Netibird-AWG` · `WireGuard®` · `Rosenpass` · `GitHub` · `ICE` · company/product names · sample URLs · version numbers.
 
 When a brand sits beside a common noun, keep its exact spelling but join them the way your language builds such phrases — a hyphen, a connector word, an inflected noun — rather than copying English's bare noun-stack.
 

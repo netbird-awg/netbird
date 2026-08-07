@@ -1,11 +1,8 @@
 #!/bin/sh
 # decide if we should use systemd or init/upstart
 use_systemctl="True"
-systemd_version=0
 if ! command -V systemctl >/dev/null 2>&1; then
   use_systemctl="False"
-else
-    systemd_version=$(systemctl --version | head -1 | sed 's/systemd //g')
 fi
 
 remove() {
@@ -13,6 +10,7 @@ remove() {
 
   if [ "${use_systemctl}" = "True" ]; then
     printf "\033[32m Stopping the service\033[0m\n"
+    systemctl stop netibird-awg || true
     systemctl stop netbird || true
 
     if [ -e /lib/systemd/system/netbird.service ]; then
@@ -22,7 +20,8 @@ remove() {
 
   fi
   printf "\033[32m Uninstalling the service\033[0m\n"
-  /usr/bin/netbird service uninstall || true
+  /usr/bin/netibird-awg service uninstall || true
+  /usr/bin/netibird-awg --service netbird service uninstall || true
 
 
   if [ "${use_systemctl}" = "True" ]; then

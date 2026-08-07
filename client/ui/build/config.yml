@@ -6,9 +6,9 @@ version: '3'
 # This information is used to generate the build assets.
 info:
   companyName: "NetBird GmbH" # The name of the company
-  productName: "NetBird" # The name of the application
+  productName: "Netibird-AWG" # The name of the application
   productIdentifier: "io.netbird.client" # The unique product identifier
-  description: "NetBird desktop client" # The application description
+  description: "Netibird-AWG desktop client" # The application description
   copyright: "NetBird GmbH" # Copyright text
   comments: "Some Product Comments" # Comments
   version: "0.0.1" # The application version

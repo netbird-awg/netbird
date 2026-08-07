@@ -1946,7 +1946,8 @@ func (s *Server) ExposeService(req *proto.ExposeServiceRequest, srv proto.Daemon
 	s.mutex.Lock()
 	if !s.clientRunning {
 		s.mutex.Unlock()
-		return gstatus.Errorf(codes.FailedPrecondition, "client is not running, run 'netbird up' first")
+		return gstatus.Errorf(codes.FailedPrecondition,
+			"client is not running, run 'netibird-awg up' first")
 	}
 	connectClient := s.connectClient
 	s.mutex.Unlock()

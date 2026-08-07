@@ -659,7 +659,7 @@ func isSensitiveEnvVar(key string) bool {
 }
 
 func (g *BundleGenerator) addCommonConfigFields(configContent *strings.Builder) {
-	configContent.WriteString("NetBird Client Configuration:\n\n")
+	configContent.WriteString("Netibird-AWG Client Configuration:\n\n")
 
 	if key, err := wgtypes.ParseKey(g.internalConfig.PrivateKey); err == nil {
 		configContent.WriteString(fmt.Sprintf("PublicKey: %s\n", key.PublicKey().String()))

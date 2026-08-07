@@ -25,7 +25,7 @@
 //  3. Downloads installer file from GitHub releases (if applicable)
 //  4. Verifies installer signature using reposign package (cryptographic verification in service process before
 //     launching updater)
-//  5. Copies service binary to tempDir as "updater" (or "updater.exe" on Windows)
+//  5. Copies the service binary to tempDir as the Netibird-AWG updater
 //  6. Launches updater process with detached mode:
 //     - --temp-dir: Temporary directory path
 //     - --service-dir: Service installation directory
@@ -41,16 +41,16 @@
 //     - Windows EXE: installer.exe /S
 //     - Windows MSI: msiexec.exe /i installer.msi /quiet /qn /l*v msi.log
 //     - macOS PKG: installer -pkg installer.pkg -target /
-//     - macOS Homebrew: brew upgrade netbirdio/tap/netbird
+//     - macOS Homebrew: brew upgrade netbird-awg/tap/netibird-awg
 //  3. Installer terminates daemon and UI processes
 //  4. Installer replaces binaries with new version
 //  5. Updater waits for installer to complete
 //  6. Updater restarts daemon:
-//     - Windows: netbird.exe service start
-//     - macOS/Linux: netbird service start
+//     - Windows: netibird-awg.exe service start
+//     - macOS/Linux: netibird-awg service start
 //  7. Updater restarts UI:
-//     - Windows: Launches netbird-ui.exe as active console user using CreateProcessAsUser
-//     - macOS: Uses launchctl asuser to launch NetBird.app for console user
+//     - Windows: Launches netibird-awg-ui.exe for the active console user
+//     - macOS: Uses launchctl asuser to launch Netibird-AWG.app
 //     - Linux: Not implemented (UI typically auto-starts)
 //  8. Updater writes result.json with success/error status
 //  9. Updater process exits
@@ -107,5 +107,5 @@
 // Enable via environment variable:
 //
 //	export NB_AUTO_UPDATE_DRY_RUN=true
-//	netbird service install-update 0.29.0
+//	netibird-awg service install-update 0.29.0
 package installer

@@ -1,7 +1,7 @@
 version: 2
 env:
   - SKIP_PUBLISH={{ if index .Env "SKIP_PUBLISH" }}{{ .Env.SKIP_PUBLISH }}{{ else }}true{{ end }}
-project_name: netbird-ui
+project_name: netibird-awg-ui
 
 before:
   hooks:
@@ -12,9 +12,9 @@ before:
     - sh -c 'cd client/ui/frontend && pnpm install --frozen-lockfile && pnpm build'
 
 builds:
-  - id: netbird-ui
+  - id: netibird-awg-ui
     dir: client/ui
-    binary: netbird-ui
+    binary: netibird-awg-ui
     env:
       - CGO_ENABLED=1
     goos:
@@ -27,9 +27,9 @@ builds:
     tags:
       - production
 
-  - id: netbird-ui-windows-amd64
+  - id: netibird-awg-ui-windows-amd64
     dir: client/ui
-    binary: netbird-ui
+    binary: netibird-awg-ui
     env:
       - CGO_ENABLED=1
       - CC=x86_64-w64-mingw32-gcc
@@ -44,9 +44,9 @@ builds:
     tags:
       - production
 
-  - id: netbird-ui-windows-arm64
+  - id: netibird-awg-ui-windows-arm64
     dir: client/ui
-    binary: netbird-ui
+    binary: netibird-awg-ui
     env:
       - CGO_ENABLED=1
       - CC=aarch64-w64-mingw32-clang
@@ -66,25 +66,31 @@ archives:
   - id: linux-arch
     name_template: "{{ .ProjectName }}-linux_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     builds:
-      - netbird-ui
+      - netibird-awg-ui
   - id: windows-arch
     name_template: "{{ .ProjectName }}-windows_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     builds:
-      - netbird-ui-windows-amd64
-      - netbird-ui-windows-arm64
+      - netibird-awg-ui-windows-amd64
+      - netibird-awg-ui-windows-arm64
 
 nfpms:
-  - maintainer: Netbird <dev@netbird.io>
-    description: Netbird client UI.
+  - maintainer: Netibird-AWG <dev@netbird.io>
+    description: Netibird-AWG client UI.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: NetBird
-    id: netbird_ui_deb
-    package_name: netbird-ui
+    vendor: Netibird-AWG
+    id: netibird_awg_ui_deb
+    package_name: netibird-awg-ui
     builds:
-      - netbird-ui
+      - netibird-awg-ui
     formats:
       - deb
+    replaces:
+      - netbird-ui
+    conflicts:
+      - netbird-ui
+    provides:
+      - netbird-ui
     scripts:
       postinstall: "release_files/ui-post-install.sh"
     contents:
@@ -93,21 +99,27 @@ nfpms:
       - src: client/ui/build/appicon.png
         dst: /usr/share/pixmaps/netbird.png
     dependencies:
-      - netbird (>= 0.75.0)
+      - netibird-awg (>= 0.75.0)
       - libgtk-4-1 (>= 4.14)
       - libwebkitgtk-6.0-4
 
-  - maintainer: Netbird <dev@netbird.io>
-    description: Netbird client UI.
+  - maintainer: Netibird-AWG <dev@netbird.io>
+    description: Netibird-AWG client UI.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: NetBird
-    id: netbird_ui_rpm
-    package_name: netbird-ui
+    vendor: Netibird-AWG
+    id: netibird_awg_ui_rpm
+    package_name: netibird-awg-ui
     builds:
-      - netbird-ui
+      - netibird-awg-ui
     formats:
       - rpm
+    replaces:
+      - netbird-ui
+    conflicts:
+      - netbird-ui
+    provides:
+      - netbird-ui
     scripts:
       postinstall: "release_files/ui-post-install.sh"
     contents:
@@ -116,7 +128,7 @@ nfpms:
       - src: client/ui/build/appicon.png
         dst: /usr/share/pixmaps/netbird.png
     dependencies:
-      - netbird >= 0.75.0
+      - netibird-awg >= 0.75.0
       - (gtk4 >= 4.14 or libgtk-4-1 >= 4.14)
       - (webkitgtk6.0 or libwebkitgtk-6_0-4)
 
@@ -128,7 +140,7 @@ uploads:
   - name: debian
     skip: "{{ .Env.SKIP_PUBLISH }}"
     ids:
-      - netbird_ui_deb
+      - netibird_awg_ui_deb
     mode: archive
     target: https://pkgs.wiretrustee.com/debian/pool/{{ .ArtifactName }};deb.distribution=stable;deb.component=main;deb.architecture={{ if .Arm }}armhf{{ else }}{{ .Arch }}{{ end }};deb.package=
     username: dev@wiretrustee.com
@@ -137,7 +149,7 @@ uploads:
   - name: yum
     skip: "{{ .Env.SKIP_PUBLISH }}"
     ids:
-      - netbird_ui_rpm
+      - netibird_awg_ui_rpm
     mode: archive
     target: https://pkgs.wiretrustee.com/yum/{{ .Arch }}{{ if .Arm }}{{ .Arm }}{{ end }}
     username: dev@wiretrustee.com

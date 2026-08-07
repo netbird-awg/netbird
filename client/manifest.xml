@@ -3,10 +3,10 @@
     <assemblyIdentity
             version="0.0.0.1"
             processorArchitecture="*"
-            name="netbird.exe"
+            name="netibird-awg.exe"
             type="win32"
     />
-    <description>Netbird application</description>
+    <description>Netibird-AWG application</description>
     <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
         <security>
             <requestedPrivileges>

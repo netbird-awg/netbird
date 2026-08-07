@@ -1,7 +1,7 @@
 version: 2
 env:
   - SKIP_PUBLISH={{ if index .Env "SKIP_PUBLISH" }}{{ .Env.SKIP_PUBLISH }}{{ else }}true{{ end }}
-project_name: netbird-ui
+project_name: netibird-awg-ui
 
 before:
   hooks:
@@ -20,9 +20,9 @@ builds:
   # Wails Linux backend to the GTK3 stack and swaps our GTK4-only XEmbed
   # tray host for the pure-Go stub (client/ui/xembed_host_gtk3_linux.go).
   # Must be built on the oldest supported glibc (ubuntu-22.04 runner).
-  - id: netbird-ui-gtk3
+  - id: netibird-awg-ui-gtk3
     dir: client/ui
-    binary: netbird-ui
+    binary: netibird-awg-ui
     env:
       - CGO_ENABLED=1
     goos:
@@ -40,7 +40,7 @@ archives:
   - id: linux-gtk3-arch
     name_template: "{{ .ProjectName }}-linux-gtk3_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     builds:
-      - netbird-ui-gtk3
+      - netibird-awg-ui-gtk3
 
 nfpms:
   # Same package_name as the GTK4 packages -- the two are mutually-exclusive
@@ -48,18 +48,24 @@ nfpms:
   # distro points at exactly one of them. The file names must still differ:
   # the Debian pool is shared storage keyed by file name, so a default-named
   # gtk3 .deb would overwrite the stable one.
-  - maintainer: Netbird <dev@netbird.io>
-    description: Netbird client UI.
+  - maintainer: Netibird-AWG <dev@netbird.io>
+    description: Netibird-AWG client UI.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: NetBird
-    id: netbird_ui_deb_gtk3
-    package_name: netbird-ui
+    vendor: Netibird-AWG
+    id: netibird_awg_ui_deb_gtk3
+    package_name: netibird-awg-ui
     file_name_template: "{{ .PackageName }}-gtk3_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     builds:
-      - netbird-ui-gtk3
+      - netibird-awg-ui-gtk3
     formats:
       - deb
+    replaces:
+      - netbird-ui
+    conflicts:
+      - netbird-ui
+    provides:
+      - netbird-ui
     scripts:
       postinstall: "release_files/ui-post-install.sh"
     contents:
@@ -68,22 +74,28 @@ nfpms:
       - src: client/ui/build/appicon.png
         dst: /usr/share/pixmaps/netbird.png
     dependencies:
-      - netbird (>= 0.75.0)
+      - netibird-awg (>= 0.75.0)
       - libgtk-3-0
       - libwebkit2gtk-4.1-0
 
-  - maintainer: Netbird <dev@netbird.io>
-    description: Netbird client UI.
+  - maintainer: Netibird-AWG <dev@netbird.io>
+    description: Netibird-AWG client UI.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: NetBird
-    id: netbird_ui_rpm_gtk3
-    package_name: netbird-ui
+    vendor: Netibird-AWG
+    id: netibird_awg_ui_rpm_gtk3
+    package_name: netibird-awg-ui
     file_name_template: "{{ .PackageName }}-gtk3_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     builds:
-      - netbird-ui-gtk3
+      - netibird-awg-ui-gtk3
     formats:
       - rpm
+    replaces:
+      - netbird-ui
+    conflicts:
+      - netbird-ui
+    provides:
+      - netbird-ui
     scripts:
       postinstall: "release_files/ui-post-install.sh"
     contents:
@@ -92,7 +104,7 @@ nfpms:
       - src: client/ui/build/appicon.png
         dst: /usr/share/pixmaps/netbird.png
     dependencies:
-      - netbird >= 0.75.0
+      - netibird-awg >= 0.75.0
       - (gtk3 or libgtk-3-0)
       - (webkit2gtk4.1 or libwebkit2gtk-4_1-0)
 
@@ -109,13 +121,13 @@ changelog:
   disable: true
 
 uploads:
-  # The gtk3 packages reuse the netbird-ui package name, so they live in
+  # The gtk3 packages reuse the netibird-awg-ui package name, so they live in
   # dedicated repo paths (deb distribution `gtk3`, yum path `yum-gtk3`) that
   # legacy distros point their repo config at.
   - name: debian-gtk3
     skip: "{{ .Env.SKIP_PUBLISH }}"
     ids:
-      - netbird_ui_deb_gtk3
+      - netibird_awg_ui_deb_gtk3
     mode: archive
     target: https://pkgs.wiretrustee.com/debian/pool/{{ .ArtifactName }};deb.distribution=gtk3;deb.component=main;deb.architecture={{ if .Arm }}armhf{{ else }}{{ .Arch }}{{ end }};deb.package=
     username: dev@wiretrustee.com
@@ -124,7 +136,7 @@ uploads:
   - name: yum-gtk3
     skip: "{{ .Env.SKIP_PUBLISH }}"
     ids:
-      - netbird_ui_rpm_gtk3
+      - netibird_awg_ui_rpm_gtk3
     mode: archive
     target: https://pkgs.wiretrustee.com/yum-gtk3/{{ .Arch }}{{ if .Arm }}{{ .Arm }}{{ end }}
     username: dev@wiretrustee.com

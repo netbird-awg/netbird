@@ -5,8 +5,8 @@ usage() {
   cat <<'EOF'
 Usage: client/test/json-socket-docker.sh [tcp|unix|both]
 
-Builds the NetBird client Docker image from the local source tree, starts
-`netbird service run` in a container with --enable-json-socket, and verifies
+Builds the Netibird-AWG client Docker image from the local source tree, starts
+`netibird-awg service run` in a container with --enable-json-socket, and verifies
 that the HTTP/JSON daemon gateway responds to Status requests.
 
 Modes:
@@ -60,7 +60,7 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE="${IMAGE:-netbird-json-socket-test:local}"
+IMAGE="${IMAGE:-netibird-awg-json-socket-test:local}"
 TARGETARCH="${TARGETARCH:-$(go env GOARCH)}"
 PLATFORM="${PLATFORM:-linux/${TARGETARCH}}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-30}"
@@ -78,17 +78,17 @@ cleanup() {
 trap cleanup EXIT
 
 build_image() {
-  echo "==> Building Linux ${TARGETARCH} netbird binary"
+  echo "==> Building Linux ${TARGETARCH} netibird-awg binary"
   mkdir -p "${TMP_DIR}/context/client"
   cp "${ROOT_DIR}/client/Dockerfile" "${TMP_DIR}/context/Dockerfile"
-  cp "${ROOT_DIR}/client/netbird-entrypoint.sh" "${TMP_DIR}/context/client/netbird-entrypoint.sh"
+  cp "${ROOT_DIR}/client/netibird-awg-entrypoint.sh" "${TMP_DIR}/context/client/netibird-awg-entrypoint.sh"
 
-  (cd "${ROOT_DIR}" && CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" go build -o "${TMP_DIR}/context/netbird" ./client)
+  (cd "${ROOT_DIR}" && CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" go build -o "${TMP_DIR}/context/netibird-awg" ./client)
 
   echo "==> Building ${IMAGE} for ${PLATFORM}"
   "${RUNTIME}" build \
     --platform "${PLATFORM}" \
-    --build-arg NETBIRD_BINARY=netbird \
+    --build-arg NETBIRD_BINARY=netibird-awg \
     -t "${IMAGE}" \
     -f "${TMP_DIR}/context/Dockerfile" \
     "${TMP_DIR}/context"
@@ -173,7 +173,7 @@ run_netbird_container() {
   "${RUNTIME}" run --rm -d \
     --name "${container}" \
     -e NB_STATE_DIR=/tmp/netbird-state \
-    --entrypoint /usr/local/bin/netbird \
+    --entrypoint /usr/local/bin/netibird-awg \
     "$@" \
     "${IMAGE}" \
     --log-file console \

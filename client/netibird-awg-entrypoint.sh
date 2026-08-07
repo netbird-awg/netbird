@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-: ${NB_ENTRYPOINT_SERVICE_TIMEOUT:="30"}
-NETBIRD_BIN="${NETBIRD_BIN:-"netbird"}"
+: "${NB_ENTRYPOINT_SERVICE_TIMEOUT:=30}"
+NETBIRD_BIN="${NETBIRD_BIN:-"netibird-awg"}"
 export NB_LOG_FILE="${NB_LOG_FILE:-"console,/var/log/netbird/client.log"}"
 service_pids=()
 
 _log() {
   # mimic Go logger's output for easier parsing
   # 2025-04-15T21:32:00+08:00 INFO client/internal/config.go:495: setting notifications to disabled by default
-  printf "$(date -Isec) ${1} ${BASH_SOURCE[1]}:${BASH_LINENO[1]}: ${2}\n" "${@:3}" >&2
+  printf '%s %s %s:%s: %s\n' \
+    "$(date -Isec)" "$1" "${BASH_SOURCE[1]}" "${BASH_LINENO[1]}" "$2" >&2
 }
 
 info() {
@@ -21,9 +22,9 @@ warn() {
 }
 
 on_exit() {
-  info "Shutting down NetBird daemon..."
+  info "Shutting down Netibird-AWG daemon..."
   if test "${#service_pids[@]}" -gt 0; then
-    info "terminating service process IDs: ${service_pids[@]@Q}"
+    info "terminating service process IDs: ${service_pids[*]}"
     kill -TERM "${service_pids[@]}" 2>/dev/null || true
     wait "${service_pids[@]}" 2>/dev/null || true
   else
@@ -51,7 +52,7 @@ wait_for_daemon_startup() {
 }
 
 connect() {
-  info "running 'netbird up'..."
+  info "running 'netibird-awg up'..."
   "${NETBIRD_BIN}" up
   return $?
 }
@@ -60,7 +61,7 @@ main() {
   trap 'on_exit' SIGTERM SIGINT EXIT
   "${NETBIRD_BIN}" service run &
   service_pids+=("$!")
-  info "registered new service process 'netbird service run', currently running: ${service_pids[@]@Q}"
+  info "registered new service process 'netibird-awg service run', currently running: ${service_pids[*]}"
 
   wait_for_daemon_startup "${NB_ENTRYPOINT_SERVICE_TIMEOUT}"
   connect

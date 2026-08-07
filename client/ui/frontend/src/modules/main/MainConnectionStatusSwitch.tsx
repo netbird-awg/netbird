@@ -226,7 +226,7 @@ export const MainConnectionStatusSwitch = () => {
         >
             <img
                 src={netbirdFullLogo}
-                alt={"NetBird"}
+                alt={"Netibird-AWG"}
                 className={"wails-no-draggable mb-4 h-7 w-auto select-none"}
                 draggable={false}
             />

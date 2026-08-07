@@ -36,7 +36,7 @@ tasks:
       terminal that launched the .exe. Useful for chasing tray, event-stream,
       or daemon-RPC bugs that have no other feedback channel on Windows.
 
-      Output is bin/netbird-ui-console.exe — kept distinct so the production
+      Output is bin/netibird-awg-ui-console.exe — kept distinct so the production
       binary built by `windows:build` isn't shadowed.
 
       Cross-compile from Linux works the same way:

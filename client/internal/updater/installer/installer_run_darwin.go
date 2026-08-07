@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	daemonName    = "netbird"
-	updaterBinary = "updater"
-	uiBinary      = "/Applications/NetBird.app"
+	daemonName    = "netibird-awg"
+	updaterBinary = "netibird-awg-updater"
+	uiBinary      = "/Applications/Netibird-AWG.app"
 
 	defaultTempDir = "/var/lib/netbird/tmp-install"
 
-	pkgDownloadURL = "https://github.com/netbirdio/netbird/releases/download/v%version/netbird_%version_darwin_%arch.pkg"
+	pkgDownloadURL = "https://github.com/netbird-awg/netbird/releases/download/v%version/netibird-awg_%version_darwin_%arch.pkg"
 )
 
 var (
@@ -82,21 +82,21 @@ func (u *Installer) Setup(ctx context.Context, dryRun bool, installerFile string
 }
 
 func (u *Installer) startDaemon(daemonFolder string) error {
-	log.Infof("starting netbird service")
+	log.Infof("starting Netibird-AWG service")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, filepath.Join(daemonFolder, daemonName), "service", "start")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Warnf("failed to start netbird service: %v, output: %s", err, string(output))
+		log.Warnf("failed to start Netibird-AWG service: %v, output: %s", err, string(output))
 		return err
 	}
-	log.Infof("netbird service started successfully")
+	log.Infof("Netibird-AWG service started successfully")
 	return nil
 }
 
 func (u *Installer) startUIAsUser() error {
-	log.Infof("starting netbird-ui: %s", uiBinary)
+	log.Infof("starting Netibird-AWG UI: %s", uiBinary)
 
 	username, err := consoleUser()
 	if err != nil {
@@ -117,7 +117,7 @@ func (u *Installer) startUIAsUser() error {
 		return fmt.Errorf("run UI launch: %w", err)
 	}
 
-	log.Infof("netbird-ui started successfully for user %s", username)
+	log.Infof("Netibird-AWG UI started successfully for user %s", username)
 	return nil
 }
 
@@ -167,11 +167,11 @@ func (u *Installer) updateHomeBrew(ctx context.Context) error {
 	// Homebrew must be run as a non-root user
 	// To find out which user installed NetBird using HomeBrew we can check the owner of our brew tap directory
 	// Check both Apple Silicon and Intel Mac paths
-	brewTapPath := "/opt/homebrew/Library/Taps/netbirdio/homebrew-tap/"
+	brewTapPath := "/opt/homebrew/Library/Taps/netbird-awg/homebrew-tap/"
 	brewBinPath := "/opt/homebrew/bin/brew"
 	if _, err := os.Stat(brewTapPath); os.IsNotExist(err) {
 		// Try Intel Mac path
-		brewTapPath = "/usr/local/Homebrew/Library/Taps/netbirdio/homebrew-tap/"
+		brewTapPath = "/usr/local/Homebrew/Library/Taps/netbird-awg/homebrew-tap/"
 		brewBinPath = "/usr/local/bin/brew"
 	}
 
@@ -195,16 +195,18 @@ func (u *Installer) updateHomeBrew(ctx context.Context) error {
 	// https://github.com/Homebrew/brew/issues/15833
 	homeDir := brewUser.HomeDir
 
-	// Check if netbird-ui is installed (must run as the brew user, not root)
-	checkUICmd := exec.CommandContext(ctx, "sudo", "-u", userName, brewBinPath, "list", "--formula", "netbirdio/tap/netbird-ui")
+	// Check if the UI is installed (must run as the brew user, not root).
+	checkUICmd := exec.CommandContext(ctx, "sudo", "-u", userName, brewBinPath,
+		"list", "--formula", "netbird-awg/tap/netibird-awg-ui")
 	checkUICmd.Env = append(os.Environ(), "HOME="+homeDir)
 	uiInstalled := checkUICmd.Run() == nil
 
 	// Homebrew does not support installing specific versions
 	// Thus it will always update to latest and ignore targetVersion
-	upgradeArgs := []string{"-u", userName, brewBinPath, "upgrade", "netbirdio/tap/netbird"}
+	upgradeArgs := []string{"-u", userName, brewBinPath, "upgrade",
+		"netbird-awg/tap/netibird-awg"}
 	if uiInstalled {
-		upgradeArgs = append(upgradeArgs, "netbirdio/tap/netbird-ui")
+		upgradeArgs = append(upgradeArgs, "netbird-awg/tap/netibird-awg-ui")
 	}
 
 	cmd := exec.CommandContext(ctx, "sudo", upgradeArgs...)
@@ -219,14 +221,16 @@ func (u *Installer) updateHomeBrew(ctx context.Context) error {
 }
 
 func (u *Installer) killUI() {
-	log.Infof("killing existing netbird-ui processes")
-	cmd := exec.Command("pkill", "-x", "netbird-ui")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		// pkill returns exit code 1 if no processes matched, which is fine
-		log.Debugf("pkill netbird-ui result: %v, output: %s", err, string(output))
-	} else {
-		log.Infof("netbird-ui processes killed")
+	log.Infof("killing existing Netibird-AWG and legacy UI processes")
+	for _, processName := range []string{"netibird-awg-ui", "netbird-ui"} {
+		cmd := exec.Command("pkill", "-x", processName)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			// pkill returns exit code 1 if no processes matched, which is fine
+			log.Debugf("pkill %s result: %v, output: %s",
+				processName, err, string(output))
+		}
 	}
+	log.Infof("UI process cleanup completed")
 }
 
 func urlWithVersionArch(_ Type, version string) string {

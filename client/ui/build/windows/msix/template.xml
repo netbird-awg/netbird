@@ -8,17 +8,17 @@
         AllowPromptForPassword="false">
     </Settings>
     <Installer
-        Path="netbird-ui"
+        Path="netibird-awg-ui"
         Arguments=""
         InstallLocation="C:\Program Files\NetBird\NetBird">
     </Installer>
     <PackageInformation
-        PackageName="NetBird"
-        PackageDisplayName="NetBird"
+        PackageName="Netibird-AWG"
+        PackageDisplayName="Netibird-AWG"
         PublisherName="CN=NetBird"
-        PublisherDisplayName="NetBird"
+        PublisherDisplayName="Netibird-AWG"
         Version="0.0.1.0"
-        PackageDescription="NetBird desktop client">
+        PackageDescription="Netibird-AWG desktop client">
         <Capabilities>
             <Capability Name="runFullTrust" />
             
@@ -26,9 +26,9 @@
         <Applications>
             <Application
                 Id="io.netbird.client"
-                Description="NetBird desktop client"
-                DisplayName="NetBird"
-                ExecutableName="netbird-ui"
+                Description="Netibird-AWG desktop client"
+                DisplayName="Netibird-AWG"
+                ExecutableName="netibird-awg-ui"
                 EntryPoint="Windows.FullTrustApplication">
                 
             </Application>
@@ -41,13 +41,13 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>NetBird</DisplayName>
-            <PublisherDisplayName>NetBird</PublisherDisplayName>
-            <Description>NetBird desktop client</Description>
+            <DisplayName>Netibird-AWG</DisplayName>
+            <PublisherDisplayName>Netibird-AWG</PublisherDisplayName>
+            <Description>Netibird-AWG desktop client</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>
-    <SaveLocation PackagePath="netbird-ui.msix" />
+    <SaveLocation PackagePath="netibird-awg-ui.msix" />
     <PackageIntegrity>
         <CertificatePath></CertificatePath>
     </PackageIntegrity>

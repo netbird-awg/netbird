@@ -1,14 +1,13 @@
 #!/bin/sh
 
-export PATH=$PATH:/usr/local/bin
+export PATH="$PATH":/usr/local/bin
 
-# check if netbird is installed
-NB_BIN=$(which netbird)
+# Keep the daemon installed when removing only the UI.
+NB_BIN=$(command -v netibird-awg || true)
 if [ -z "$NB_BIN" ]
 then
   exit 0
 fi
-# start netbird daemon service
-echo "netbird daemon service still running. You can uninstall it by running: "
-echo "sudo netbird service stop"
-echo "sudo netbird service uninstall"
+echo "Netibird-AWG daemon service is still running. You can uninstall it with:"
+echo "sudo netibird-awg service stop"
+echo "sudo netibird-awg service uninstall"

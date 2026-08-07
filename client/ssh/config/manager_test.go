@@ -50,7 +50,7 @@ func TestManager_SetupSSHClientConfig(t *testing.T) {
 	configStr := string(content)
 
 	// Verify the basic SSH config structure exists
-	assert.Contains(t, configStr, "# NetBird SSH client configuration")
+	assert.Contains(t, configStr, "# Netibird-AWG SSH client configuration")
 	assert.Contains(t, configStr, "Generated automatically - do not edit manually")
 
 	// Check that peer hostnames are included

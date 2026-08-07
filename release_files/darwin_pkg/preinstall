@@ -3,22 +3,28 @@
 set -x
 
 LOG_FILE=/var/log/netbird/client_pre_install.log
-AGENT=/usr/local/bin/netbird
+AGENT=/usr/local/bin/netibird-awg
+LEGACY_AGENT=/usr/local/bin/netbird
 
 mkdir -p /var/log/netbird/
 
 {
     # check if it was installed with brew
-    brew list --formula | grep netbird
-    if [ $? -eq 0 ]
+    if brew list --formula | grep -qE '^(netibird-awg|netbird)$'
     then
-        echo "NetBird has been installed with Brew. Please use Brew to update the package."
+        echo "Netibird-AWG or legacy NetBird is managed by Brew. Use Brew to update it."
         exit 1
     fi
-    osascript -e 'quit app "Netbird"' || true
-    $AGENT service stop || true
+    osascript -e 'quit app "Netibird-AWG"' || true
+    osascript -e 'quit app "NetBird"' || true
+    if [ -x "$AGENT" ]; then
+        "$AGENT" service stop || true
+    fi
+    if [ -x "$LEGACY_AGENT" ]; then
+        "$LEGACY_AGENT" service stop || true
+        "$LEGACY_AGENT" service uninstall || true
+    fi
 
     echo "Preinstall complete"
     exit 0 # all good
-} &> $LOG_FILE
-
+} > "$LOG_FILE" 2>&1

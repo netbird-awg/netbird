@@ -1,6 +1,6 @@
 version: 2
 
-project_name: netbird-ui
+project_name: netibird-awg-ui
 
 before:
   hooks:
@@ -11,9 +11,9 @@ before:
     - sh -c 'cd client/ui/frontend && pnpm install --frozen-lockfile && pnpm build'
 
 builds:
-  - id: netbird-ui-darwin
+  - id: netibird-awg-ui-darwin
     dir: client/ui
-    binary: netbird-ui
+    binary: netibird-awg-ui
     env:
       - CGO_ENABLED=1
       - MACOSX_DEPLOYMENT_TARGET=11.0
@@ -33,11 +33,11 @@ builds:
       - production
 
 universal_binaries:
-  - id: netbird-ui-darwin
+  - id: netibird-awg-ui-darwin
 
 archives:
   - builds:
-      - netbird-ui-darwin
+      - netibird-awg-ui-darwin
 
 checksum:
   name_template: "{{ .ProjectName }}_darwin_checksums.txt"

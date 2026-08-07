@@ -2,18 +2,15 @@
 
 # Step 1, decide if we should use systemd or init/upstart
 use_systemctl="True"
-systemd_version=0
 if ! command -V systemctl >/dev/null 2>&1; then
   use_systemctl="False"
-else
-    systemd_version=$(systemctl --version | head -1 | sed 's/systemd //g')
 fi
 
 cleanInstall() {
     printf "\033[32m Post Install of an clean install\033[0m\n"
     # Step 3 (clean install), enable the service in the proper way for this platform
-    /usr/bin/netbird service install
-    /usr/bin/netbird service start
+    /usr/bin/netibird-awg service install
+    /usr/bin/netibird-awg service start
 }
 
 upgrade() {
@@ -21,15 +18,19 @@ upgrade() {
     if [ "${use_systemctl}" = "True" ]; then
       printf "\033[32m Stopping the service\033[0m\n"
       systemctl stop netbird 2> /dev/null || true
+      systemctl stop netibird-awg 2> /dev/null || true
     fi
     if [ -e /lib/systemd/system/netbird.service ]; then
       rm -f /lib/systemd/system/netbird.service
       systemctl daemon-reload
     fi
     # will trow an error until everyone upgrade
-    /usr/bin/netbird service uninstall 2> /dev/null || true
-    /usr/bin/netbird service install
-    /usr/bin/netbird service start
+    if [ -x /usr/bin/netbird ]; then
+      /usr/bin/netbird service uninstall 2> /dev/null || true
+    fi
+    /usr/bin/netibird-awg --service netbird service uninstall 2> /dev/null || true
+    /usr/bin/netibird-awg service install
+    /usr/bin/netibird-awg service start
 }
 
 # Check if this is a clean install or an upgrade

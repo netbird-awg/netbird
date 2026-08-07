@@ -11,7 +11,7 @@ on:
 env:
   SIGN_PIPE_VER: "v0.1.8"
   GORELEASER_VER: "v2.16.0"
-  PRODUCT_NAME: "NetBird"
+  PRODUCT_NAME: "Netibird-AWG"
   COPYRIGHT: "NetBird GmbH"
   flags: ""
   SKIP_PUBLISH: "true"
@@ -327,21 +327,21 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
         with:
           name: linux-packages
-          path: dist/netbird_linux**
+          path: dist/netibird-awg_linux**
           retention-days: 7
       - name: upload windows packages
         id: upload_windows_packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
         with:
           name: windows-packages
-          path: dist/netbird_windows**
+          path: dist/netibird-awg_windows**
           retention-days: 7
       - name: upload macos packages
         id: upload_macos_packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
         with:
           name: macos-packages
-          path: dist/netbird_darwin**
+          path: dist/netibird-awg_darwin**
           retention-days: 7
 
   release_ui:
@@ -677,7 +677,7 @@ jobs:
       run:
         shell: powershell
     env:
-      PackageWorkdir: netbird_windows_${{ matrix.arch }}
+      PackageWorkdir: netibird-awg_windows_${{ matrix.arch }}
       downloadPath: '${{ github.workspace }}\temp'
     steps:
       - name: Checkout
@@ -708,8 +708,8 @@ jobs:
         run: |
           $workdir = "dist\${{ env.PackageWorkdir }}"
           New-Item -ItemType Directory -Force -Path $workdir | Out-Null
-          $client = Get-ChildItem -Recurse -Path release -Filter "netbird_*_windows_${{ matrix.arch }}.tar.gz" | Select-Object -First 1
-          $ui = Get-ChildItem -Recurse -Path release-ui -Filter "netbird-ui-windows_*_windows_${{ matrix.arch }}.tar.gz" | Select-Object -First 1
+          $client = Get-ChildItem -Recurse -Path release -Filter "netibird-awg_*_windows_${{ matrix.arch }}.tar.gz" | Select-Object -First 1
+          $ui = Get-ChildItem -Recurse -Path release-ui -Filter "netibird-awg-ui-windows_*_windows_${{ matrix.arch }}.tar.gz" | Select-Object -First 1
           if (-not $client) { Write-Host "::error::client tarball not found for ${{ matrix.arch }}"; exit 1 }
           if (-not $ui) { Write-Host "::error::ui tarball not found for ${{ matrix.arch }}"; exit 1 }
           Write-Host "Client: $($client.FullName)"
@@ -789,7 +789,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE" }
 
       - name: Rename NSIS installer
-        run: mv netbird-installer.exe netbird_installer_test_windows_${{ matrix.arch }}.exe
+        run: mv netibird-awg-installer.exe netibird-awg_installer_test_windows_${{ matrix.arch }}.exe
 
       - name: Install WiX
         run: |
@@ -799,7 +799,7 @@ jobs:
       - name: Build MSI installer
         env:
           NETBIRD_VERSION: "${{ steps.semver_parser.outputs.fullversion }}"
-        run: wix build -arch ${{ matrix.arch == 'amd64' && 'x64' || 'arm64' }} -ext WixToolset.Util.wixext -o netbird_installer_test_windows_${{ matrix.arch }}.msi .\client\netbird.wxs -d ProcessorArchitecture=${{ matrix.arch == 'amd64' && 'x64' || 'arm64' }} -d ArchSuffix=${{ matrix.arch }}
+        run: wix build -arch ${{ matrix.arch == 'amd64' && 'x64' || 'arm64' }} -ext WixToolset.Util.wixext -o netibird-awg_installer_test_windows_${{ matrix.arch }}.msi .\client\netbird.wxs -d ProcessorArchitecture=${{ matrix.arch == 'amd64' && 'x64' || 'arm64' }} -d ArchSuffix=${{ matrix.arch }}
 
       - name: Upload installer artifacts
         if: always()
@@ -807,8 +807,8 @@ jobs:
         with:
           name: windows-installer-test-${{ matrix.arch }}
           path: |
-            netbird_installer_test_windows_${{ matrix.arch }}.exe
-            netbird_installer_test_windows_${{ matrix.arch }}.msi
+            netibird-awg_installer_test_windows_${{ matrix.arch }}.exe
+            netibird-awg_installer_test_windows_${{ matrix.arch }}.msi
           retention-days: 3
 
   comment_release_artifacts:

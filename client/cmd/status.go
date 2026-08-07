@@ -34,8 +34,8 @@ var (
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Display NetBird client status",
-	Long:  "Display the current status of the NetBird client, including connection status, peer information, and network details.",
+	Short: "Display Netibird-AWG client status",
+	Long:  "Display the current status of the Netibird-AWG client, including connection status, peer information, and network details.",
 	RunE:  statusFunc,
 }
 
@@ -45,8 +45,8 @@ func init() {
 	statusCmd.PersistentFlags().BoolVarP(&detailFlag, "detail", "d", false, "display detailed status information in human-readable format")
 	statusCmd.PersistentFlags().BoolVarP(&jsonFlag, "json", "j", false, "display detailed status information in json format")
 	statusCmd.PersistentFlags().BoolVarP(&yamlFlag, "yaml", "y", false, "display detailed status information in yaml format")
-	statusCmd.PersistentFlags().BoolVarP(&ipv4Flag, "ipv4", "4", false, "display only NetBird IPv4 of this peer, e.g., --ipv4 will output 100.64.0.33")
-	statusCmd.PersistentFlags().BoolVarP(&ipv6Flag, "ipv6", "6", false, "display only NetBird IPv6 of this peer")
+	statusCmd.PersistentFlags().BoolVarP(&ipv4Flag, "ipv4", "4", false, "display only Netibird-AWG IPv4 of this peer, e.g., --ipv4 will output 100.64.0.33")
+	statusCmd.PersistentFlags().BoolVarP(&ipv6Flag, "ipv6", "6", false, "display only Netibird-AWG IPv6 of this peer")
 	statusCmd.MarkFlagsMutuallyExclusive("detail", "json", "yaml", "ipv4", "ipv6")
 	statusCmd.PersistentFlags().StringSliceVarP(&ipsFilter, "filter-by-ips", "I", []string{}, "filters the detailed output by a list of one or more IPs (v4 or v6), e.g., --filter-by-ips 100.64.0.100,fd00::1")
 	statusCmd.PersistentFlags().StringSliceVarP(&prefixNamesFilter, "filter-by-names", "N", []string{}, "filters the detailed output by a list of one or more peer FQDN or hostnames, e.g., --filter-by-names peer-a,peer-b.netbird.cloud")
@@ -89,9 +89,9 @@ func statusFunc(cmd *cobra.Command, args []string) error {
 	if needsAuth && !jsonFlag && !yamlFlag {
 		cmd.Printf("Daemon status: %s\n\n"+
 			"Run UP command to log in with SSO (interactive login):\n\n"+
-			" netbird up \n\n"+
+			" netibird-awg up \n\n"+
 			"If you are running a self-hosted version and no SSO provider has been configured in your Management Server,\n"+
-			"you can use a setup-key:\n\n netbird up --management-url <YOUR_MANAGEMENT_URL> --setup-key <YOUR_SETUP_KEY>\n\n"+
+			"you can use a setup-key:\n\n netibird-awg up --management-url <YOUR_MANAGEMENT_URL> --setup-key <YOUR_SETUP_KEY>\n\n"+
 			"More info: https://docs.netbird.io/how-to/register-machines-using-setup-keys\n\n",
 			resp.GetStatus(),
 		)
@@ -160,7 +160,7 @@ func getStatus(ctx context.Context, fullPeerStatus bool, shouldRunProbes bool) (
 		//nolint
 		return nil, fmt.Errorf("failed to connect to daemon error: %v\n"+
 			"If the daemon is not running please run: "+
-			"\nnetbird service install \nnetbird service start\n", err)
+			"\nnetibird-awg service install \nnetibird-awg service start\n", err)
 	}
 	defer conn.Close()
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # This code is based on the netbird-installer contribution by physk on GitHub.
 # Source: https://github.com/physk/netbird-installer
 set -e
@@ -5,10 +6,10 @@ set -e
 CONFIG_FOLDER="/etc/netbird"
 CONFIG_FILE="$CONFIG_FOLDER/install.conf"
 
-OWNER="netbirdio"
+OWNER="netbird-awg"
 REPO="netbird"
-CLI_APP="netbird"
-UI_APP="netbird-ui"
+CLI_APP="netibird-awg"
+UI_APP="netibird-awg-ui"
 
 # Set default variable
 OS_NAME=""
@@ -17,6 +18,9 @@ ARCH="$(uname -m)"
 PACKAGE_MANAGER="bin"
 INSTALL_DIR=""
 SUDO=""
+# Fork releases are distributed from GitHub; upstream package repositories do
+# not carry the renamed binaries.
+USE_BIN_INSTALL=true
 
 
 if command -v sudo > /dev/null && [ "$(id -u)" -ne 0 ]; then
@@ -35,7 +39,7 @@ get_release() {
     local RELEASE=$1
     if [ "$RELEASE" = "latest" ]; then
         local TAG="latest"
-        local URL="https://pkgs.netbird.io/releases/latest"
+        local URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/latest"
     else
         local TAG="tags/${RELEASE}"
         local URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/${TAG}"
@@ -46,7 +50,7 @@ get_release() {
     else
           OUTPUT=$(curl -s "${URL}") 
     fi
-	TAG_NAME=$(echo ${OUTPUT} |  grep -Eo '\"tag_name\":\s*\"v([0-9]+\.){2}[0-9]+"' | tail -n 1)
+	TAG_NAME=$(echo "${OUTPUT}" | grep -Eo '\"tag_name\":\s*\"v([0-9]+\.){2}[0-9]+"' | tail -n 1)
 	echo "${TAG_NAME}" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+'
 }
 
@@ -54,20 +58,14 @@ download_release_binary() {
     VERSION=$(get_release "$NETBIRD_RELEASE")
 	echo "Using the following tag name for binary installation: ${TAG_NAME}"
     BASE_URL="https://github.com/${OWNER}/${REPO}/releases/download"
-    BINARY_BASE_NAME="${VERSION#v}_${OS_TYPE}_${ARCH}.tar.gz"
-
-    # for Darwin, download the signed NetBird-UI
-    if [ "$OS_TYPE" = "darwin" ] && [ "$1" = "$UI_APP" ]; then
-        BINARY_BASE_NAME="${VERSION#v}_${OS_TYPE}_${ARCH}_signed.zip"
-    fi
-
     if [ "$1" = "$UI_APP" ]; then
-       BINARY_NAME="$1-${OS_TYPE}_${BINARY_BASE_NAME}"
        if [ "$OS_TYPE" = "darwin" ]; then
-         BINARY_NAME="$1_${BINARY_BASE_NAME}"
+         BINARY_NAME="${UI_APP}_${VERSION#v}_darwin_all.tar.gz"
+       else
+         BINARY_NAME="${UI_APP}-linux_${VERSION#v}_${OS_TYPE}_${ARCH}.tar.gz"
        fi
     else
-       BINARY_NAME="$1_${BINARY_BASE_NAME}"
+       BINARY_NAME="${CLI_APP}_${VERSION#v}_${OS_TYPE}_${ARCH}.tar.gz"
     fi
 
     DOWNLOAD_URL="${BASE_URL}/${VERSION}/${BINARY_NAME}"
@@ -76,26 +74,16 @@ download_release_binary() {
     if [ -n "$GITHUB_TOKEN" ]; then
       cd /tmp && curl -H  "Authorization: token ${GITHUB_TOKEN}" -LO "$DOWNLOAD_URL"
     else
-      cd /tmp && curl -LO "$DOWNLOAD_URL" || curl -LO --dns-servers 8.8.8.8 "$DOWNLOAD_URL"
+      cd /tmp
+      if ! curl -LO "$DOWNLOAD_URL"; then
+        curl -LO --dns-servers 8.8.8.8 "$DOWNLOAD_URL"
+      fi
     fi
 
 
-    if [ "$OS_TYPE" = "darwin" ] && [ "$1" = "$UI_APP" ]; then
-        INSTALL_DIR="/Applications/NetBird UI.app"
-
-        if test -d "$INSTALL_DIR" ; then
-          echo "removing $INSTALL_DIR"
-          rm -rfv "$INSTALL_DIR"
-        fi
-
-        # Unzip the app and move to INSTALL_DIR
-        unzip -q -o "$BINARY_NAME"
-        mv -v "netbird_ui_${OS_TYPE}/" "$INSTALL_DIR/" || mv -v "netbird_ui_${OS_TYPE}_${ARCH}/" "$INSTALL_DIR/"
-    else
-        ${SUDO} mkdir -p "$INSTALL_DIR"
-        tar -xzvf "$BINARY_NAME"
-        ${SUDO} mv "${1%_"${BINARY_BASE_NAME}"}" "$INSTALL_DIR/"
-    fi
+    ${SUDO} mkdir -p "$INSTALL_DIR"
+    tar -xzvf "$BINARY_NAME"
+    ${SUDO} mv "$1" "$INSTALL_DIR/"
 }
 
 add_apt_repo() {
@@ -199,20 +187,20 @@ check_use_bin_variable() {
 }
 
 install_netbird() {
-    if [ -x "$(command -v netbird)" ]; then
-      status_output="$(netbird status 2>&1 || true)"
+    if [ -x "$(command -v netibird-awg)" ]; then
+      status_output="$(netibird-awg status 2>&1 || true)"
 
       if echo "$status_output" | grep -q 'failed to connect to daemon error: context deadline exceeded'; then
-          echo "Warning: could not reach NetBird daemon (timeout), proceeding anyway"
+          echo "Warning: could not reach Netibird-AWG daemon (timeout), proceeding anyway"
       else
           if echo "$status_output" | grep -q 'Management: Connected' && \
               echo "$status_output" | grep -q 'Signal: Connected'; then
-              echo "NetBird service is running, please stop it before proceeding"
+              echo "Netibird-AWG service is running, please stop it before proceeding"
               exit 1
           fi
 
           if [ -n "$status_output" ]; then
-              echo "NetBird seems to be installed already, please remove it before proceeding"
+              echo "Netibird-AWG seems to be installed already, please remove it before proceeding"
               exit 1
           fi
       fi
@@ -251,8 +239,8 @@ install_netbird() {
             ${SUDO} rpm-ostree -y install netbird-ui
         fi
         # ensure the service is started after install
-         ${SUDO} netbird service install || true
-         ${SUDO} netbird service start || true
+         ${SUDO} netibird-awg service install || true
+         ${SUDO} netibird-awg service start || true
     ;;
     pkg)
         # Check if the package is already installed
@@ -312,18 +300,18 @@ install_netbird() {
 
     # Load and start netbird service
     if [ "$PACKAGE_MANAGER" != "rpm-ostree" ] && [ "$PACKAGE_MANAGER" != "pkg" ]; then
-        if ! ${SUDO} netbird service install 2>&1; then
-            echo "NetBird service has already been loaded"
+        if ! ${SUDO} netibird-awg service install 2>&1; then
+            echo "Netibird-AWG service has already been loaded"
         fi
-        if ! ${SUDO} netbird service start 2>&1; then
-            echo "NetBird service has already been started"
+        if ! ${SUDO} netibird-awg service start 2>&1; then
+            echo "Netibird-AWG service has already been started"
         fi
     fi
 
 
-    echo "Installation has been finished. To connect, you need to run NetBird by executing the following command:"
+    echo "Installation has been finished. To connect, run Netibird-AWG with:"
     echo ""
-    echo "netbird up"
+    echo "netibird-awg up"
 }
 
 version_greater_equal() {
@@ -339,9 +327,9 @@ is_bin_package_manager() {
 }
 
 stop_running_netbird_ui() {
-  NB_UI_PROC=$(ps -ef | grep "[n]etbird-ui" | awk '{print $2}')
+  NB_UI_PROC=$(pgrep -f '(^|/)(netibird-awg-ui|netbird-ui)([[:space:]]|$)' || true)
   if [ -n "$NB_UI_PROC" ]; then
-    echo "NetBird UI is running with PID $NB_UI_PROC. Stopping it..."
+    echo "Netibird-AWG UI is running with PID $NB_UI_PROC. Stopping it..."
     kill -9 "$NB_UI_PROC"
   fi
 }
@@ -350,28 +338,28 @@ update_netbird() {
   if is_bin_package_manager "$CONFIG_FILE"; then
     latest_release=$(get_release "latest")
     latest_version=${latest_release#v}
-    installed_version=$(netbird version)
+    installed_version=$(netibird-awg version)
 
     if [ "$latest_version" = "$installed_version" ]; then
-      echo "Installed NetBird version ($installed_version) is up-to-date"
+      echo "Installed Netibird-AWG version ($installed_version) is up-to-date"
       exit 0
     fi
 
     if version_greater_equal "$latest_version" "$installed_version"; then
-      echo "NetBird new version ($latest_version) available. Updating..."
+      echo "Netibird-AWG new version ($latest_version) available. Updating..."
       echo ""
-      echo "Initiating NetBird update. This will stop the netbird service and restart it after the update"
+      echo "Initiating Netibird-AWG update. This will restart the netibird-awg service"
 
-      ${SUDO} netbird service stop || true
-      ${SUDO} netbird service uninstall || true
+      ${SUDO} netibird-awg service stop || true
+      ${SUDO} netibird-awg service uninstall || true
       stop_running_netbird_ui
       install_native_binaries
 
-      ${SUDO} netbird service install
-      ${SUDO} netbird service start
+      ${SUDO} netibird-awg service install
+      ${SUDO} netibird-awg service start
     fi
   else
-     echo "NetBird installation was done using a package manager. Please use your system's package manager to update"
+     echo "Netibird-AWG installation was done using a package manager. Please use your system's package manager to update"
   fi
 }
 
@@ -381,7 +369,7 @@ if [ -z "$SKIP_UI_APP" ]; then
 else
     if $SKIP_UI_APP; then
       echo "SKIP_UI_APP has been set to true in the environment"
-      echo "NetBird UI installation will be omitted based on your preference"
+      echo "Netibird-AWG UI installation will be omitted based on your preference"
     fi
 fi
 
@@ -398,20 +386,20 @@ if type uname >/dev/null 2>&1; then
             SKIP_UI_APP=true
           else
             if [ -f /etc/os-release ]; then
-              OS_NAME="$(. /etc/os-release && echo "$ID")"
+              OS_NAME="$(awk -F= '$1 == "ID" {gsub(/^"|"$/, "", $2); print $2}' /etc/os-release)"
               INSTALL_DIR="/usr/bin"
 
               # Allow netbird UI installation for x64 arch only
               if [ "$ARCH" != "amd64" ] && [ "$ARCH" != "arm64" ] \
                   && [ "$ARCH" != "x86_64" ];then
                   SKIP_UI_APP=true
-                  echo "NetBird UI installation will be omitted as $ARCH is not a compatible architecture"
+                  echo "Netibird-AWG UI installation will be omitted as $ARCH is not a compatible architecture"
               fi
 
               # Allow netbird UI installation for linux running desktop environment
               if [ -z "$XDG_CURRENT_DESKTOP" ];then
                   SKIP_UI_APP=true
-                  echo "NetBird UI installation will be omitted as Linux does not run desktop environment"
+                  echo "Netibird-AWG UI installation will be omitted as Linux does not run desktop environment"
               fi
 
               # Check the availability of a compatible package manager

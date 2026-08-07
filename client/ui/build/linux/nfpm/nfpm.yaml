@@ -3,26 +3,26 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "netbird-ui"
+name: "netibird-awg-ui"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.0.1"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "NetBird desktop client"
-vendor: "NetBird"
+description: "Netibird-AWG desktop client"
+vendor: "Netibird-AWG"
 homepage: "https://wails.io"
 license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/netbird-ui"
-    dst: "/usr/local/bin/netbird-ui"
+  - src: "./bin/netibird-awg-ui"
+    dst: "/usr/local/bin/netibird-awg-ui"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/netbird-ui.png"
+    dst: "/usr/share/icons/hicolor/128x128/apps/netibird-awg-ui.png"
   - src: "./build/linux/netbird-ui.desktop"
-    dst: "/usr/share/applications/netbird-ui.desktop"
+    dst: "/usr/share/applications/netibird-awg-ui.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

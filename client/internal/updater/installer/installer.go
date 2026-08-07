@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	updaterBinary = "updater"
+	updaterBinary = "netibird-awg-updater"
 )
 
 type Installer struct {

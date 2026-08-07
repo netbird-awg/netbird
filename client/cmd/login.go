@@ -41,8 +41,8 @@ func init() {
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Log in to the NetBird network",
-	Long:  "Log in to the NetBird network using a setup key or SSO",
+	Short: "Log in to the Netibird-AWG network",
+	Long:  "Log in to the Netibird-AWG network using a setup key or SSO",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := setEnvAndFlags(cmd); err != nil {
 			return fmt.Errorf("set env and flags: %v", err)
@@ -105,7 +105,7 @@ func doDaemonLogin(ctx context.Context, cmd *cobra.Command, providedSetupKey str
 		//nolint
 		return fmt.Errorf("failed to connect to daemon error: %v\n"+
 			"If the daemon is not running please run: "+
-			"\nnetbird service install \nnetbird service start\n", err)
+			"\nnetibird-awg service install \nnetibird-awg service start\n", err)
 	}
 	defer conn.Close()
 
@@ -183,7 +183,7 @@ func doExtendSession(ctx context.Context, cmd *cobra.Command) error {
 		//nolint
 		return fmt.Errorf("failed to connect to daemon error: %v\n"+
 			"If the daemon is not running please run: "+
-			"\nnetbird service install \nnetbird service start\n", err)
+			"\nnetibird-awg service install \nnetibird-awg service start\n", err)
 	}
 	defer conn.Close()
 
@@ -246,7 +246,7 @@ func getActiveProfile(ctx context.Context, pm *profilemanager.ProfileManager, pr
 	}
 
 	if activeProf == nil {
-		return nil, fmt.Errorf("active profile not found, please run 'netbird profile create' first")
+		return nil, fmt.Errorf("active profile not found, please run 'netibird-awg profile create' first")
 	}
 	return activeProf, nil
 }
@@ -295,7 +295,7 @@ func switchProfile(ctx context.Context, handle string, username string) (profile
 		//nolint
 		return "", fmt.Errorf("failed to connect to daemon error: %v\n"+
 			"If the daemon is not running please run: "+
-			"\nnetbird service install \nnetbird service start\n", err)
+			"\nnetibird-awg service install \nnetibird-awg service start\n", err)
 	}
 	defer conn.Close()
 
