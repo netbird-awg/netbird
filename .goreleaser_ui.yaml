@@ -25,6 +25,7 @@ builds:
       - -s -w -X github.com/netbirdio/netbird/version.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.CommitDate}} -X main.builtBy=goreleaser
     mod_timestamp: "{{ .CommitTimestamp }}"
     tags:
+      - hybrid_awg
       - production
 
   - id: netibird-awg-ui-windows-amd64
@@ -42,6 +43,7 @@ builds:
       - -H windowsgui
     mod_timestamp: "{{ .CommitTimestamp }}"
     tags:
+      - hybrid_awg
       - production
 
   - id: netibird-awg-ui-windows-arm64
@@ -60,6 +62,7 @@ builds:
       - -H windowsgui
     mod_timestamp: "{{ .CommitTimestamp }}"
     tags:
+      - hybrid_awg
       - production
 
 archives:
@@ -85,19 +88,13 @@ nfpms:
       - netibird-awg-ui
     formats:
       - deb
-    replaces:
-      - netbird-ui
-    conflicts:
-      - netbird-ui
-    provides:
-      - netbird-ui
     scripts:
       postinstall: "release_files/ui-post-install.sh"
     contents:
       - src: client/ui/build/linux/netbird.desktop
-        dst: /usr/share/applications/org.wails.netbird.desktop
+        dst: /usr/share/applications/netibird-awg.desktop
       - src: client/ui/build/appicon.png
-        dst: /usr/share/pixmaps/netbird.png
+        dst: /usr/share/pixmaps/netibird-awg.png
     dependencies:
       - netibird-awg (>= 0.75.0)
       - libgtk-4-1 (>= 4.14)
@@ -114,19 +111,13 @@ nfpms:
       - netibird-awg-ui
     formats:
       - rpm
-    replaces:
-      - netbird-ui
-    conflicts:
-      - netbird-ui
-    provides:
-      - netbird-ui
     scripts:
       postinstall: "release_files/ui-post-install.sh"
     contents:
       - src: client/ui/build/linux/netbird.desktop
-        dst: /usr/share/applications/org.wails.netbird.desktop
+        dst: /usr/share/applications/netibird-awg.desktop
       - src: client/ui/build/appicon.png
-        dst: /usr/share/pixmaps/netbird.png
+        dst: /usr/share/pixmaps/netibird-awg.png
     dependencies:
       - netibird-awg >= 0.75.0
       - (gtk4 >= 4.14 or libgtk-4-1 >= 4.14)

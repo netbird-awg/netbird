@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Netibird-AWG
 Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/bin/netibird-awg-ui
-Icon=netbird
+Icon=netibird-awg
 Type=Application
 Terminal=false
 Categories=Utility;

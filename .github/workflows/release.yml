@@ -15,15 +15,19 @@ env:
   COPYRIGHT: "NetBird GmbH"
   flags: ""
   SKIP_PUBLISH: "true"
-  SKIP_DOCKER_PUSH: "false"
+  SKIP_DOCKER_PUSH: ${{ github.repository == 'netbirdio/netbird' && 'false' || 'true' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || github.actor_id }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   release_freebsd_port:
     name: "FreeBSD Port / Build & Test"
+    if: github.repository == 'netbirdio/netbird'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -126,7 +130,7 @@ jobs:
           retention-days: 30
 
   release:
-    runs-on: ubuntu-24.04-8-core
+    runs-on: ${{ github.repository == 'netbirdio/netbird' && 'ubuntu-24.04-8-core' || 'ubuntu-24.04' }}
     outputs:
       release_artifact_url: ${{ steps.upload_release.outputs.artifact-url }}
       linux_packages_artifact_url: ${{ steps.upload_linux_packages.outputs.artifact-url }}
@@ -190,23 +194,28 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 #v4.1.0
       - name: Login to Docker hub
-        if: github.event_name != 'pull_request'
+        if: env.SKIP_DOCKER_PUSH != 'true' && env.DOCKER_USER != '' && env.DOCKER_TOKEN != ''
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          username: ${{ env.DOCKER_USER }}
+          password: ${{ env.DOCKER_TOKEN }}
       - name: Log in to the GitHub container registry
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: env.SKIP_DOCKER_PUSH != 'true' && env.GHCR_TOKEN != ''
+        env:
+          GHCR_TOKEN: ${{ secrets.CI_DOCKER_PUSH_GITHUB_TOKEN }}
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.CI_DOCKER_PUSH_GITHUB_TOKEN }}
+          password: ${{ env.GHCR_TOKEN }}
       - name: Install OS build dependencies
         run: sudo apt update && sudo apt install -y -q gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 
       - name: Decode GPG signing key
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: env.GPG_RPM_PRIVATE_KEY != ''
         env:
           GPG_RPM_PRIVATE_KEY: ${{ secrets.GPG_RPM_PRIVATE_KEY }}
         run: |
@@ -235,6 +244,7 @@ jobs:
           SKIP_PUBLISH: ${{ env.SKIP_PUBLISH }}
           SKIP_DOCKER_PUSH: ${{ env.SKIP_DOCKER_PUSH }}
       - name: Verify RPM signatures
+        if: env.GPG_RPM_KEY_FILE != ''
         run: |
           docker run --rm -v $(pwd)/dist:/dist fedora:41 bash -c '
             dnf install -y -q rpm-sign curl >/dev/null 2>&1
@@ -411,7 +421,7 @@ jobs:
         run: sudo apt update && sudo apt install -y -q libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev gcc-mingw-w64-x86-64
 
       - name: Decode GPG signing key
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: env.GPG_RPM_PRIVATE_KEY != ''
         env:
           GPG_RPM_PRIVATE_KEY: ${{ secrets.GPG_RPM_PRIVATE_KEY }}
         run: |
@@ -452,6 +462,7 @@ jobs:
           NFPM_NETBIRD_UI_RPM_PASSPHRASE: ${{ secrets.GPG_RPM_PASSPHRASE }}
           SKIP_PUBLISH: ${{ env.SKIP_PUBLISH }}
       - name: Verify RPM signatures
+        if: env.GPG_RPM_KEY_FILE != ''
         run: |
           docker run --rm -v $(pwd)/dist:/dist fedora:41 bash -c '
             dnf install -y -q rpm-sign curl >/dev/null 2>&1
@@ -548,7 +559,7 @@ jobs:
         run: sudo apt update && sudo apt install -y -q libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Decode GPG signing key
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: env.GPG_RPM_PRIVATE_KEY != ''
         env:
           GPG_RPM_PRIVATE_KEY: ${{ secrets.GPG_RPM_PRIVATE_KEY }}
         run: |
@@ -578,6 +589,7 @@ jobs:
           NFPM_NETBIRD_UI_RPM_GTK3_PASSPHRASE: ${{ secrets.GPG_RPM_PASSPHRASE }}
           SKIP_PUBLISH: ${{ env.SKIP_PUBLISH }}
       - name: Verify RPM signatures
+        if: env.GPG_RPM_KEY_FILE != ''
         run: |
           docker run --rm -v $(pwd)/dist:/dist fedora:41 bash -c '
             dnf install -y -q rpm-sign curl >/dev/null 2>&1
@@ -914,7 +926,7 @@ jobs:
   trigger_signer:
     runs-on: ubuntu-latest
     needs: [release, release_ui, release_ui_gtk3, release_ui_darwin, test_windows_installer]
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && github.repository == 'netbirdio/netbird'
     steps:
       - name: Trigger binaries sign pipelines
         uses: benc-uk/workflow-dispatch@31e2b3319479a63f0ab15bf800eff9e913504e26 # v1.3.2

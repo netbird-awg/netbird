@@ -38,6 +38,7 @@ builds:
       - -s -w -X github.com/netbirdio/netbird/version.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.CommitDate}} -X main.builtBy=goreleaser
     mod_timestamp: "{{ .CommitTimestamp }}"
     tags:
+      - hybrid_awg
       - load_wgnt_from_rsrc
 
   - id: netibird-awg-static
@@ -58,6 +59,7 @@ builds:
       - -s -w -X github.com/netbirdio/netbird/version.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.CommitDate}} -X main.builtBy=goreleaser
     mod_timestamp: "{{ .CommitTimestamp }}"
     tags:
+      - hybrid_awg
       - load_wgnt_from_rsrc
 
   - id: netbird-mgmt
@@ -192,6 +194,7 @@ builds:
 
 universal_binaries:
   - id: netibird-awg
+    name_template: netibird-awg
 
 archives:
   - id: netibird-awg
@@ -222,12 +225,6 @@ nfpms:
       - netibird-awg
     formats:
       - deb
-    replaces:
-      - netbird
-    conflicts:
-      - netbird
-    provides:
-      - netbird
     scripts:
       postinstall: "release_files/post_install.sh"
       preremove: "release_files/pre_remove.sh"
@@ -244,12 +241,6 @@ nfpms:
       - netibird-awg
     formats:
       - rpm
-    replaces:
-      - netbird
-    conflicts:
-      - netbird
-    provides:
-      - netbird
     scripts:
       postinstall: "release_files/post_install.sh"
       preremove: "release_files/pre_remove.sh"
