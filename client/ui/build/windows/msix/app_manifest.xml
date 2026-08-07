@@ -8,7 +8,7 @@
   IgnorableNamespaces="uap3">
   
   <Identity 
-    Name="io.netbird.client"
+    Name="io.netbird-awg.client"
     Publisher="CN=NetBird"
     Version="0.0.1.0" 
     ProcessorArchitecture="x64" />
@@ -29,7 +29,7 @@
   </Resources>
   
   <Applications>
-    <Application Id="io.netbird.client" Executable="netibird-awg-ui" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="io.netbird-awg.client" Executable="netibird-awg-ui" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="Netibird-AWG"
         Description="Netibird-AWG desktop client"

@@ -11,7 +11,7 @@
         <key>CFBundleExecutable</key>
             <string>netibird-awg-ui</string>
         <key>CFBundleIdentifier</key>
-            <string>io.netbird.client</string>
+            <string>io.netbird-awg.client</string>
         <key>CFBundleVersion</key>
             <string>0.0.1</string>
         <key>CFBundleGetInfoString</key>

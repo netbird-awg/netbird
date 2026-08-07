@@ -327,7 +327,7 @@ is_bin_package_manager() {
 }
 
 stop_running_netbird_ui() {
-  NB_UI_PROC=$(pgrep -f '(^|/)(netibird-awg-ui|netbird-ui)([[:space:]]|$)' || true)
+  NB_UI_PROC=$(pgrep -f '(^|/)netibird-awg-ui([[:space:]]|$)' || true)
   if [ -n "$NB_UI_PROC" ]; then
     echo "Netibird-AWG UI is running with PID $NB_UI_PROC. Stopping it..."
     kill -9 "$NB_UI_PROC"

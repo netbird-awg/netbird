@@ -25,7 +25,7 @@
         </Capabilities>
         <Applications>
             <Application
-                Id="io.netbird.client"
+                Id="io.netbird-awg.client"
                 Description="Netibird-AWG desktop client"
                 DisplayName="Netibird-AWG"
                 ExecutableName="netibird-awg-ui"

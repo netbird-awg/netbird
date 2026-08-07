@@ -7,13 +7,13 @@
     Settings", Jamf "Application & Custom Settings" → External
     Application).
 
-    Bundle identifier (preference domain): io.netbird.client
+    Bundle identifier (preference domain): io.netbird-awg.client
 
     The MDM provider will wrap this plist into a Configuration Profile
     payload of type com.apple.ManagedClient.preferences and push it to
     target devices via the Apple MDM protocol. The OS materializes the
     final file at:
-        /Library/Managed Preferences/io.netbird.client.plist
+        /Library/Managed Preferences/io.netbird-awg.client.plist
     which is what the NetBird daemon's client/mdm/policy_darwin.go
     loader reads on every 1-minute MDM reload tick.
 
@@ -26,7 +26,7 @@
       - Remove or comment out any key you do NOT want to enforce. The
         daemon treats an absent key as "no enforcement" for that field.
       - Keep the document well-formed XML. Validate locally with:
-            plutil -lint docs/io.netbird.client.plist
+            plutil -lint docs/io.netbird-awg.client.plist
       - Keys are camelCase; values are typed (<string>, <true/>, <false/>,
         <integer>). See docs/src/pages/client/mdm-integration.mdx (the
         public docs page) for the full reference.

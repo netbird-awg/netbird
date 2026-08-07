@@ -3,8 +3,8 @@
 set -e
 set -u
 
-# Restart the renamed UI only when either the current or legacy UI was running.
-pid="$(pgrep -f '^/usr/bin/(netibird-awg-ui|netbird-ui)([[:space:]]|$)' | head -n 1 || true)"
+# Restart the UI only when it was already running.
+pid="$(pgrep -f '^/usr/bin/netibird-awg-ui([[:space:]]|$)' | head -n 1 || true)"
 if [ -n "${pid}" ]
 then
   uid="$(cat /proc/"${pid}"/loginuid)"
@@ -14,6 +14,6 @@ then
   fi
   username="$(id -nu "${uid}")"
   # Only re-run if it was already running
-  pkill -f '^/usr/bin/(netibird-awg-ui|netbird-ui)([[:space:]]|$)' >/dev/null 2>&1 || true
+  pkill -f '^/usr/bin/netibird-awg-ui([[:space:]]|$)' >/dev/null 2>&1 || true
   su - "${username}" -c 'nohup /usr/bin/netibird-awg-ui > /dev/null 2>&1 &'
 fi

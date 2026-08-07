@@ -10,7 +10,7 @@
 #   client/mdm/policy_darwin.go loader reads on every 1-minute MDM
 #   reload tick:
 #
-#       /Library/Managed Preferences/io.netbird.client.plist
+#       /Library/Managed Preferences/io.netbird-awg.client.plist
 #
 #   Once the plist lands, the daemon picks up the new values without
 #   restart (the ticker calls Config.apply() → applyMDMPolicy() and
@@ -74,7 +74,7 @@ splitTunnelApps="$NULL"                    # comma-separated app IDs, Android-on
 ##############################################################################
 
 readonly PLIST_DIR='/Library/Managed Preferences'
-readonly PLIST_PATH="$PLIST_DIR/io.netbird.client.plist"
+readonly PLIST_PATH="$PLIST_DIR/io.netbird-awg.client.plist"
 readonly LOG_TAG='netbird-mdm'
 
 # log sends a message to the system logger using the configured tag and echoes the message to stdout prefixed by an ISO 8601 UTC timestamp and the tag.
@@ -145,7 +145,7 @@ emit_int() {
   log "set $key = $value"
 }
 
-# main builds the NetBird MDM plist from configured policy variables, validates and installs it to /Library/Managed Preferences/io.netbird.client.plist (root:wheel, 644) and optionally triggers the NetBird daemon to reload.
+# main builds the NetBird MDM plist from configured policy variables, validates and installs it to /Library/Managed Preferences/io.netbird-awg.client.plist (root:wheel, 644) and optionally triggers the NetBird daemon to reload.
 main() {
   log "applying NetBird MDM policy to $PLIST_PATH"
   /bin/mkdir -p "$PLIST_DIR"
@@ -187,7 +187,7 @@ main() {
 
   # Optional: kick the daemon for an immediate apply. Safe — does
   # nothing on a host where NetBird is not yet installed.
-  /bin/launchctl kickstart -k system/io.netbird.client 2>/dev/null || true
+  /bin/launchctl kickstart -k system/netibird-awg 2>/dev/null || true
 }
 
 main "$@"

@@ -7,7 +7,7 @@ version: '3'
 info:
   companyName: "NetBird GmbH" # The name of the company
   productName: "Netibird-AWG" # The name of the application
-  productIdentifier: "io.netbird.client" # The unique product identifier
+  productIdentifier: "io.netbird-awg.client" # The unique product identifier
   description: "Netibird-AWG desktop client" # The application description
   copyright: "NetBird GmbH" # Copyright text
   comments: "Some Product Comments" # Comments

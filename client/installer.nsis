@@ -181,20 +181,11 @@ ${If} $R0 == ""
     ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$(^NAME)" "UninstallString"
     SetRegView 64
 ${EndIf}
-${If} $R0 == ""
-    SetRegView 64
-    ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Netbird" "UninstallString"
-    ${If} $R0 == ""
-        SetRegView 32
-        ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Netbird" "UninstallString"
-        SetRegView 64
-    ${EndIf}
-${EndIf}
 ${If} $R0 != ""
     # if silent install jump to uninstall step
     IfSilent uninstall
 
-    MessageBox MB_YESNO|MB_ICONQUESTION "A NetBird client is already installed and must be removed before installing Netibird-AWG. Proceed?" IDNO done IDYES uninstall
+    MessageBox MB_YESNO|MB_ICONQUESTION "Netibird-AWG is already installed and must be removed before continuing. Proceed?" IDNO done IDYES uninstall
 
     uninstall:
       !insertmacro UninstallPreviousNSIS $R0 "/NoMsgBox"
@@ -311,13 +302,10 @@ ExecWait `taskkill /im ${UI_APP_EXE} /f`
 
 ; Remove autostart registry entries
 DetailPrint "Removing autostart registry entries if they exist..."
-; Legacy machine-wide entry written by older installers.
 DeleteRegValue HKLM "${AUTOSTART_REG_KEY}" "${APP_NAME}"
 ; Per-user entry the UI toggle writes via Wails (value name is the lowercase
 ; app-name slug). Uninstall removes the app, so drop it too.
 DeleteRegValue HKCU "${AUTOSTART_REG_KEY}" "${APP_NAME}"
-DeleteRegValue HKCU "${AUTOSTART_REG_KEY}" "netbird"
-DeleteRegValue HKCU "${AUTOSTART_REG_KEY}" "netbird-ui"
 
 ; Handle data deletion based on checkbox
 DetailPrint "Checking if user requested data deletion..."

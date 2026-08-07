@@ -5,18 +5,18 @@
 
     Wraps a `com.apple.ManagedClient.preferences` payload that pushes the
     NetBird MDM policy into:
-        /Library/Managed Preferences/io.netbird.client.plist
+        /Library/Managed Preferences/io.netbird-awg.client.plist
 
     Read at runtime by the netbird daemon's macOS loader
     (client/mdm/policy_darwin.go — Phase 2). Key names match the canonical
     lowerCamelCase form used in docs/netbird.admx and the mdm.Key*
     constants in client/mdm/policy.go.
 
-    Bundle identifier: io.netbird.client
+    Bundle identifier: io.netbird-awg.client
         (confirm against the signed pkg before fleet roll-out)
 
     Distribution:
-      - sign with `productsign --sign "Developer ID Installer: ..." ...`
+      - sign with `productsign` and a Developer ID Installer identity
         before fleet roll-out (Apple-Configurator-2 won't install an
         unsigned profile on Sonoma+ without user override).
       - For local dev install: `sudo profiles install -path netbird-macos.mobileconfig`.
@@ -46,7 +46,7 @@
     <key>PayloadVersion</key>
     <integer>1</integer>
     <key>PayloadIdentifier</key>
-    <string>io.netbird.client.mdm</string>
+    <string>io.netbird-awg.client.mdm</string>
     <key>PayloadUUID</key>
     <string>11111111-1111-1111-1111-111111111111</string>
     <key>PayloadDisplayName</key>
@@ -63,13 +63,13 @@
     <key>PayloadContent</key>
     <array>
         <dict>
-            <!-- Managed preferences payload: writes /Library/Managed Preferences/io.netbird.client.plist -->
+            <!-- Managed preferences payload: writes /Library/Managed Preferences/io.netbird-awg.client.plist -->
             <key>PayloadType</key>
             <string>com.apple.ManagedClient.preferences</string>
             <key>PayloadVersion</key>
             <integer>1</integer>
             <key>PayloadIdentifier</key>
-            <string>io.netbird.client.mdm.preferences</string>
+            <string>io.netbird-awg.client.mdm.preferences</string>
             <key>PayloadUUID</key>
             <string>22222222-2222-2222-2222-222222222222</string>
             <key>PayloadDisplayName</key>
@@ -79,7 +79,7 @@
 
             <key>PayloadContent</key>
             <dict>
-                <key>io.netbird.client</key>
+                <key>io.netbird-awg.client</key>
                 <dict>
                     <key>Forced</key>
                     <array>

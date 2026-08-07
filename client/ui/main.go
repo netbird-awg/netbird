@@ -268,7 +268,7 @@ func newApplication(onSecondInstance func()) *application.App {
 		// installer pre-populates with the toast activator CLSID; otherwise
 		// toasts show under a different identity and the MSI's CustomActivator
 		// value is orphaned.
-		Name:        "NetBird",
+		Name:        "Netibird-AWG",
 		Description: "Netibird-AWG desktop client",
 		Icon:        appIcon,
 		Assets: application.AssetOptions{
@@ -285,7 +285,7 @@ func newApplication(onSecondInstance func()) *application.App {
 			WndProcInterceptor: endSessionInterceptor(),
 		},
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "io.netbird.ui",
+			UniqueID: "io.netbird-awg.client.ui",
 			OnSecondInstanceLaunch: func(_ application.SecondInstanceData) {
 				onSecondInstance()
 			},

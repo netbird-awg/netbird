@@ -221,14 +221,12 @@ func (u *Installer) updateHomeBrew(ctx context.Context) error {
 }
 
 func (u *Installer) killUI() {
-	log.Infof("killing existing Netibird-AWG and legacy UI processes")
-	for _, processName := range []string{"netibird-awg-ui", "netbird-ui"} {
-		cmd := exec.Command("pkill", "-x", processName)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			// pkill returns exit code 1 if no processes matched, which is fine
-			log.Debugf("pkill %s result: %v, output: %s",
-				processName, err, string(output))
-		}
+	log.Infof("killing existing Netibird-AWG UI process")
+	cmd := exec.Command("pkill", "-x", "netibird-awg-ui")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		// pkill returns exit code 1 if no processes matched, which is fine
+		log.Debugf("pkill netibird-awg-ui result: %v, output: %s",
+			err, string(output))
 	}
 	log.Infof("UI process cleanup completed")
 }

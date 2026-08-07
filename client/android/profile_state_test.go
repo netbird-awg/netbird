@@ -15,18 +15,18 @@ func TestProfileAccountPathFor(t *testing.T) {
 	}{
 		{
 			name:       "default profile",
-			configPath: "/data/data/io.netbird.client/files/netbird.cfg",
-			want:       filepath.FromSlash("/data/data/io.netbird.client/files/netbird.account.json"),
+			configPath: "/data/data/io.netbird.awg.client/files/netbird.cfg",
+			want:       filepath.FromSlash("/data/data/io.netbird.awg.client/files/netbird.account.json"),
 		},
 		{
 			name:       "id profile",
-			configPath: "/data/data/io.netbird.client/files/profiles/4c5f5c8198c3989cffb5b5394f5a7ae0.json",
-			want:       filepath.FromSlash("/data/data/io.netbird.client/files/profiles/4c5f5c8198c3989cffb5b5394f5a7ae0.account.json"),
+			configPath: "/data/data/io.netbird.awg.client/files/profiles/4c5f5c8198c3989cffb5b5394f5a7ae0.json",
+			want:       filepath.FromSlash("/data/data/io.netbird.awg.client/files/profiles/4c5f5c8198c3989cffb5b5394f5a7ae0.account.json"),
 		},
 		{
 			name:       "legacy name-keyed profile is handled the same way",
-			configPath: "/data/data/io.netbird.client/files/profiles/work.json",
-			want:       filepath.FromSlash("/data/data/io.netbird.client/files/profiles/work.account.json"),
+			configPath: "/data/data/io.netbird.awg.client/files/profiles/work.json",
+			want:       filepath.FromSlash("/data/data/io.netbird.awg.client/files/profiles/work.account.json"),
 		},
 		{
 			name:       "empty path is rejected",
@@ -55,7 +55,7 @@ func TestProfileAccountPathFor(t *testing.T) {
 }
 
 func TestProfileAccountPathForDefaultDoesNotCollide(t *testing.T) {
-	root := "/data/data/io.netbird.client/files"
+	root := "/data/data/io.netbird.awg.client/files"
 
 	defaultAccount, err := profileAccountPathFor(filepath.Join(root, defaultConfigFilename))
 	if err != nil {
@@ -77,7 +77,7 @@ func TestProfileAccountPathForDefaultDoesNotCollide(t *testing.T) {
 // own keys, so sharing a path would have the two overwrite each other. The
 // expected names here mirror ProfileManager.GetStateFilePath.
 func TestProfileAccountPathAvoidsEngineStateFile(t *testing.T) {
-	root := "/data/data/io.netbird.client/files"
+	root := "/data/data/io.netbird.awg.client/files"
 
 	cases := []struct {
 		configPath  string

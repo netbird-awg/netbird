@@ -11,19 +11,9 @@ remove() {
   if [ "${use_systemctl}" = "True" ]; then
     printf "\033[32m Stopping the service\033[0m\n"
     systemctl stop netibird-awg || true
-    systemctl stop netbird || true
-
-    if [ -e /lib/systemd/system/netbird.service ]; then
-      rm -f /lib/systemd/system/netbird.service
-      systemctl daemon-reload || true
-    fi
-
   fi
   printf "\033[32m Uninstalling the service\033[0m\n"
   /usr/bin/netibird-awg service uninstall || true
-  /usr/bin/netibird-awg --service netbird service uninstall || true
-
-
   if [ "${use_systemctl}" = "True" ]; then
      printf "\n\033[32m running daemon reload\033[0m\n"
      systemctl daemon-reload || true

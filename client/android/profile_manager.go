@@ -47,7 +47,7 @@ func (p *ProfileArray) Get(i int) *Profile {
 
 /*
 
-/data/data/io.netbird.client/files/           ← configDir parameter
+/data/data/io.netbird.awg.client/files/       ← configDir parameter
 ├── netbird.cfg                                 ← Default profile config
 ├── state.json                                  ← Default profile state
 ├── active_profile.json                         ← Active profile tracker (JSON with Name + Username)

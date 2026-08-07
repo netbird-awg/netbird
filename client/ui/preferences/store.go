@@ -20,7 +20,7 @@ import (
 	"github.com/netbirdio/netbird/util"
 )
 
-// Lives under os.UserConfigDir()/netbird (OS-user writable, not the daemon's
+// Lives under os.UserConfigDir()/netibird-awg (OS-user writable, not the daemon's
 // root-owned state).
 const preferencesFileName = "ui-preferences.json"
 
@@ -330,5 +330,5 @@ func preferencesPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "netbird", preferencesFileName), nil
+	return filepath.Join(dir, "netibird-awg", preferencesFileName), nil
 }

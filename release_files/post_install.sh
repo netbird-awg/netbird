@@ -17,18 +17,8 @@ upgrade() {
     printf "\033[32m Post Install of an upgrade\033[0m\n"
     if [ "${use_systemctl}" = "True" ]; then
       printf "\033[32m Stopping the service\033[0m\n"
-      systemctl stop netbird 2> /dev/null || true
       systemctl stop netibird-awg 2> /dev/null || true
     fi
-    if [ -e /lib/systemd/system/netbird.service ]; then
-      rm -f /lib/systemd/system/netbird.service
-      systemctl daemon-reload
-    fi
-    # will trow an error until everyone upgrade
-    if [ -x /usr/bin/netbird ]; then
-      /usr/bin/netbird service uninstall 2> /dev/null || true
-    fi
-    /usr/bin/netibird-awg --service netbird service uninstall 2> /dev/null || true
     /usr/bin/netibird-awg service install
     /usr/bin/netibird-awg service start
 }
