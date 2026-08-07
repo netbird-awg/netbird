@@ -198,7 +198,7 @@ universal_binaries:
 
 archives:
   - id: netibird-awg
-    name_template: "netibird-awg_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "netibird-awg_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Mips }}_{{ .Mips }}{{ end }}"
     builds:
       - netibird-awg
       - netibird-awg-static
