@@ -3,12 +3,14 @@ package tunnel
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
 	clienttunnel "github.com/netbirdio/netbird/client/iface/tunnel"
 	"github.com/netbirdio/netbird/management/server/types"
 	sharedtypes "github.com/netbirdio/netbird/shared/management/types"
+	"github.com/netbirdio/netbird/util/crypt"
 )
 
 func TestPrepareSettingsUpdatePreservesOmittedTunnelFields(t *testing.T) {
@@ -58,6 +60,75 @@ func TestPrepareSettingsUpdateStagesProfileRotation(t *testing.T) {
 		updated.TunnelProfilePending.Revision != 5 ||
 		!updated.TunnelProfilePending.UpdatedAt.Equal(now) {
 		t.Fatalf("profile was not staged: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateAllocatesProfileRevision(t *testing.T) {
+	now := time.Now().UTC()
+	current := &types.Settings{
+		TunnelProfile:         validTunnelProfile(4, now.Add(-time.Hour)),
+		TunnelProfilePending:  validTunnelProfile(6, now.Add(-time.Minute)),
+		TunnelProfilePrevious: validTunnelProfile(5, now.Add(-2*time.Hour)),
+	}
+	updated := &types.Settings{
+		TunnelProfile: validTunnelProfile(0, time.Time{}),
+	}
+
+	changed, err := PrepareSettingsUpdate(updated, current, now)
+	if err != nil {
+		t.Fatalf("allocate profile revision: %v", err)
+	}
+	if !changed || updated.TunnelProfilePending == nil ||
+		updated.TunnelProfilePending.Revision != 7 {
+		t.Fatalf("profile revision was not allocated: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateAcceptsExplicitIncreasingRevision(t *testing.T) {
+	now := time.Now().UTC()
+	current := &types.Settings{
+		TunnelProfile:         validTunnelProfile(4, now.Add(-time.Hour)),
+		TunnelProfilePending:  validTunnelProfile(6, now.Add(-time.Minute)),
+		TunnelProfilePrevious: validTunnelProfile(5, now.Add(-2*time.Hour)),
+	}
+	updated := &types.Settings{
+		TunnelProfile: validTunnelProfile(9, time.Time{}),
+	}
+
+	changed, err := PrepareSettingsUpdate(updated, current, now)
+	if err != nil {
+		t.Fatalf("stage explicit profile revision: %v", err)
+	}
+	if !changed || updated.TunnelProfilePending == nil ||
+		updated.TunnelProfilePending.Revision != 9 {
+		t.Fatalf("explicit profile revision was not preserved: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateRejectsRevisionOverflow(t *testing.T) {
+	requestTime := time.Now().UTC().Add(-3 * time.Hour)
+	current := &types.Settings{
+		TunnelProfile: validTunnelProfile(^uint64(0), time.Now().UTC()),
+	}
+	updated := &types.Settings{
+		TunnelPolicy:            types.TunnelAccountPolicyPreferAWG,
+		TunnelPolicyUpdatedAt:   requestTime,
+		TunnelProfile:           validTunnelProfile(0, requestTime),
+		TunnelProfilePending:    validTunnelProfile(91, requestTime),
+		TunnelProfilePrevious:   validTunnelProfile(92, requestTime),
+		TunnelProfileGraceUntil: requestTime,
+	}
+	before := updated.Copy()
+
+	if _, err := PrepareSettingsUpdate(
+		updated,
+		current,
+		time.Now().UTC(),
+	); err == nil {
+		t.Fatal("profile revision overflow was accepted")
+	}
+	if !reflect.DeepEqual(before, updated) {
+		t.Fatalf("overflow mutated settings: before=%+v after=%+v", before, updated)
 	}
 }
 
@@ -282,8 +353,156 @@ func TestPrepareSettingsUpdateStagesRollbackDuringGrace(t *testing.T) {
 		updated.TunnelProfile == nil ||
 		updated.TunnelProfile.Revision != 7 ||
 		updated.TunnelProfilePending == nil ||
-		updated.TunnelProfilePending.Revision != 6 {
+		updated.TunnelProfilePending.Revision != 8 ||
+		!updated.TunnelProfilePending.UpdatedAt.Equal(now) ||
+		!sameProfileContents(
+			updated.TunnelProfilePending,
+			current.TunnelProfilePrevious,
+		) {
 		t.Fatalf("unexpected rollback state: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateRollbackPreservesAWG3Secret(t *testing.T) {
+	now := time.Now().UTC()
+	previous := validAWG3TunnelProfile(6, now.Add(-2*time.Hour))
+	previous.HeaderProtectionKey = bytes.Repeat([]byte{0x24}, 32)
+	current := &types.Settings{
+		TunnelProfile:           validAWG3TunnelProfile(7, now.Add(-time.Hour)),
+		TunnelProfilePrevious:   previous,
+		TunnelProfileGraceUntil: now.Add(time.Hour),
+	}
+	current.TunnelProfile.HeaderProtectionKey = bytes.Repeat([]byte{0x42}, 32)
+	updated := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionRollback,
+	}
+
+	if _, err := PrepareSettingsUpdate(updated, current, now); err != nil {
+		t.Fatalf("stage AWG3 rollback: %v", err)
+	}
+	if updated.TunnelProfilePending == nil ||
+		!bytes.Equal(
+			updated.TunnelProfilePending.HeaderProtectionKey,
+			previous.HeaderProtectionKey,
+		) {
+		t.Fatal("rollback did not preserve the previous AWG3 key")
+	}
+	updated.TunnelProfilePending.HeaderProtectionKey[0] ^= 0xff
+	if bytes.Equal(
+		updated.TunnelProfilePending.HeaderProtectionKey,
+		previous.HeaderProtectionKey,
+	) {
+		t.Fatal("rollback profile shares its key backing array")
+	}
+}
+
+func TestPrepareSettingsUpdateRollbackPreservesEncryptedAWG3Secret(
+	t *testing.T,
+) {
+	now := time.Now().UTC()
+	encryptionKey, err := crypt.GenerateKey()
+	if err != nil {
+		t.Fatalf("generate field encryption key: %v", err)
+	}
+	fieldEncrypt, err := crypt.NewFieldEncrypt(encryptionKey)
+	if err != nil {
+		t.Fatalf("create field encryptor: %v", err)
+	}
+	previous := validAWG3TunnelProfile(6, now.Add(-2*time.Hour))
+	previous.HeaderProtectionKey = bytes.Repeat([]byte{0x24}, 32)
+	if err := previous.EncryptSensitiveData(fieldEncrypt); err != nil {
+		t.Fatalf("encrypt previous AWG3 profile: %v", err)
+	}
+	current := &types.Settings{
+		TunnelProfile:           validTunnelProfile(7, now.Add(-time.Hour)),
+		TunnelProfilePrevious:   previous,
+		TunnelProfileGraceUntil: now.Add(time.Hour),
+	}
+	updated := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionRollback,
+	}
+
+	if _, err := PrepareSettingsUpdate(updated, current, now); err != nil {
+		t.Fatalf("stage encrypted AWG3 rollback: %v", err)
+	}
+	if updated.TunnelProfilePending == nil ||
+		updated.TunnelProfilePending.Revision != 8 ||
+		len(updated.TunnelProfilePending.HeaderProtectionKey) != 0 ||
+		updated.TunnelProfilePending.EncryptedHeaderProtectionKey !=
+			previous.EncryptedHeaderProtectionKey {
+		t.Fatalf("encrypted rollback secret was not preserved: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateRejectsRollbackRevisionOverflow(t *testing.T) {
+	now := time.Now().UTC()
+	requestTime := now.Add(-3 * time.Hour)
+	current := &types.Settings{
+		TunnelProfile:           validTunnelProfile(^uint64(0), now.Add(-time.Hour)),
+		TunnelProfilePrevious:   validTunnelProfile(^uint64(0)-1, now.Add(-2*time.Hour)),
+		TunnelProfileGraceUntil: now.Add(time.Hour),
+	}
+	updated := &types.Settings{
+		TunnelPolicy:            types.TunnelAccountPolicyPreferAWG,
+		TunnelPolicyUpdatedAt:   requestTime,
+		TunnelProfile:           validTunnelProfile(21, requestTime),
+		TunnelProfilePending:    validTunnelProfile(22, requestTime),
+		TunnelProfilePrevious:   validTunnelProfile(23, requestTime),
+		TunnelProfileGraceUntil: requestTime,
+		TunnelProfileAction:     types.TunnelProfileActionRollback,
+	}
+	before := updated.Copy()
+
+	if _, err := PrepareSettingsUpdate(updated, current, now); err == nil {
+		t.Fatal("rollback revision overflow was accepted")
+	}
+	if !reflect.DeepEqual(before, updated) {
+		t.Fatalf(
+			"rollback overflow mutated settings: before=%+v after=%+v",
+			before,
+			updated,
+		)
+	}
+}
+
+func TestPrepareSettingsUpdateActivatesMonotonicRollback(t *testing.T) {
+	now := time.Now().UTC()
+	current := &types.Settings{
+		TunnelProfile:           validAWG3TunnelProfile(7, now.Add(-time.Hour)),
+		TunnelProfilePrevious:   validAWG3TunnelProfile(6, now.Add(-2*time.Hour)),
+		TunnelProfileGraceUntil: now.Add(time.Hour),
+	}
+	current.TunnelProfile.HeaderProtectionKey = bytes.Repeat([]byte{0x42}, 32)
+	current.TunnelProfilePrevious.HeaderProtectionKey =
+		bytes.Repeat([]byte{0x24}, 32)
+	staged := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionRollback,
+	}
+
+	if _, err := PrepareSettingsUpdate(staged, current, now); err != nil {
+		t.Fatalf("stage rollback: %v", err)
+	}
+	peer := plannerAWG3Peer("ready", now)
+	peer.TunnelRuntime.ProfileRevision = 8
+	activated := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionActivate,
+	}
+
+	changed, err := PrepareSettingsUpdate(
+		activated,
+		staged,
+		now.Add(time.Minute),
+		[]*sharedtypes.ComponentPeer{peer},
+	)
+	if err != nil {
+		t.Fatalf("activate rollback: %v", err)
+	}
+	if !changed || activated.TunnelProfile == nil ||
+		activated.TunnelProfile.Revision != 8 ||
+		activated.TunnelProfilePending != nil ||
+		activated.TunnelProfilePrevious == nil ||
+		activated.TunnelProfilePrevious.Revision != 7 {
+		t.Fatalf("unexpected activated rollback: %+v", activated)
 	}
 }
 

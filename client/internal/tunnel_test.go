@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -181,6 +183,72 @@ func TestPeerTunnelStateAcceptsAWG3Peer(t *testing.T) {
 	}
 	if state.mode != tunnel.ModeAmneziaWG3 {
 		t.Fatalf("unexpected AWG3 state: %+v", state)
+	}
+}
+
+func TestUpdateTunnelProfileRejectsNonIncreasingRevision(t *testing.T) {
+	tests := []struct {
+		name     string
+		revision uint64
+	}{
+		{name: "lower", revision: 3},
+		{name: "equal", revision: 4},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cancelled := false
+			engine := &Engine{
+				config: &EngineConfig{TunnelProfile: testTunnelProfile()},
+				clientCancel: func() {
+					cancelled = true
+				},
+			}
+			profile := testProtoTunnelProfile(test.revision)
+			profile.Parameters = []byte(
+				`{"h1":"105","h2":"102","h3":"103","h4":"104"}`,
+			)
+
+			if err := engine.updateTunnelProfile(profile); err == nil {
+				t.Fatal("non-increasing tunnel profile revision was accepted")
+			}
+			if cancelled {
+				t.Fatal("rejected tunnel profile reset the connection")
+			}
+		})
+	}
+}
+
+func TestUpdateTunnelProfileResetsForHigherRevision(t *testing.T) {
+	cancelled := false
+	ctx := CtxInitState(context.Background())
+	engine := &Engine{
+		ctx:    ctx,
+		config: &EngineConfig{TunnelProfile: testTunnelProfile()},
+		clientCancel: func() {
+			cancelled = true
+		},
+	}
+
+	err := engine.updateTunnelProfile(testProtoTunnelProfile(5))
+	if !errors.Is(err, ErrResetConnection) {
+		t.Fatalf("higher revision error = %v, want reset connection", err)
+	}
+	if !cancelled {
+		t.Fatal("higher revision did not reset the connection")
+	}
+	if _, err := CtxGetState(ctx).Status(); !errors.Is(err, ErrResetConnection) {
+		t.Fatalf("context state error = %v, want reset connection", err)
+	}
+}
+
+func testProtoTunnelProfile(revision uint64) *mgmProto.TunnelProfile {
+	return &mgmProto.TunnelProfile{
+		ProtocolVersion: tunnel.ProtocolAmneziaWG2,
+		Revision:        revision,
+		Parameters: []byte(
+			`{"h1":"101","h2":"102","h3":"103","h4":"104"}`,
+		),
+		ServerTime: timestamppb.Now(),
 	}
 }
 

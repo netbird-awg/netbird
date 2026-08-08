@@ -26,7 +26,24 @@ func PrepareSettingsUpdate(
 	if updated == nil || current == nil {
 		return false, errors.New("tunnel settings are nil")
 	}
+	working := *updated
+	working.TunnelProfile = cloneProfile(updated.TunnelProfile)
+	working.TunnelProfilePending = cloneProfile(updated.TunnelProfilePending)
+	working.TunnelProfilePrevious = cloneProfile(updated.TunnelProfilePrevious)
+	changed, err := prepareSettingsUpdate(&working, current, now, peerGroups...)
+	if err != nil {
+		return false, err
+	}
+	*updated = working
+	return changed, nil
+}
 
+func prepareSettingsUpdate(
+	updated,
+	current *types.Settings,
+	now time.Time,
+	peerGroups ...[]*sharedtypes.ComponentPeer,
+) (bool, error) {
 	currentPolicy := normalizeAccountPolicy(current.TunnelPolicy)
 	if updated.TunnelPolicy == "" {
 		updated.TunnelPolicy = currentPolicy
@@ -129,23 +146,24 @@ func stageProfileUpdate(
 		return false, nil
 	}
 
-	highestRevision := uint64(0)
-	for _, profile := range []*types.TunnelProfile{
+	nextRevision, err := nextProfileRevision(
 		currentProfile,
 		current.TunnelProfilePending,
 		current.TunnelProfilePrevious,
-	} {
-		if profile != nil && profile.Revision > highestRevision {
-			highestRevision = profile.Revision
-		}
+	)
+	if err != nil {
+		return false, err
 	}
-	if requested.Revision <= highestRevision {
+	if requested.Revision != 0 && requested.Revision < nextRevision {
 		return false, fmt.Errorf(
 			"tunnel profile revision must increase from %d",
-			highestRevision,
+			nextRevision-1,
 		)
 	}
 	profile := requested.Copy()
+	if profile.Revision == 0 {
+		profile.Revision = nextRevision
+	}
 	if profile.ProtocolVersion == clienttunnel.ProtocolAmneziaWG3 ||
 		profileParametersMissing(profile.Parameters) {
 		parameters, err := generateProfileParameters(profile.ProtocolVersion)
@@ -207,14 +225,36 @@ func stageProfileRollback(
 		!current.TunnelProfileGraceUntil.After(now) {
 		return false, errors.New("tunnel profile rollback grace period expired")
 	}
+	nextRevision, err := nextProfileRevision(
+		current.TunnelProfile,
+		current.TunnelProfilePending,
+		current.TunnelProfilePrevious,
+	)
+	if err != nil {
+		return false, err
+	}
 
 	updated.TunnelProfile = cloneProfile(current.TunnelProfile)
 	updated.TunnelProfilePending = cloneProfile(
 		current.TunnelProfilePrevious,
 	)
+	updated.TunnelProfilePending.Revision = nextRevision
 	updated.TunnelProfilePending.UpdatedAt = now
 	updated.TunnelProfileAction = ""
 	return true, nil
+}
+
+func nextProfileRevision(profiles ...*types.TunnelProfile) (uint64, error) {
+	highestRevision := uint64(0)
+	for _, profile := range profiles {
+		if profile != nil && profile.Revision > highestRevision {
+			highestRevision = profile.Revision
+		}
+	}
+	if highestRevision == ^uint64(0) {
+		return 0, errors.New("tunnel profile revision exhausted")
+	}
+	return highestRevision + 1, nil
 }
 
 func validatePendingReadiness(
