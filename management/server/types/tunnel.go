@@ -38,8 +38,9 @@ const (
 type TunnelProfileAction string
 
 const (
-	TunnelProfileActionActivate TunnelProfileAction = "activate"
-	TunnelProfileActionRollback TunnelProfileAction = "rollback"
+	TunnelProfileActionActivate      TunnelProfileAction = "activate"
+	TunnelProfileActionRollback      TunnelProfileAction = "rollback"
+	TunnelProfileActionCancelPending TunnelProfileAction = "cancel_pending"
 )
 
 // TunnelProfile is the active account-wide Hybrid AWG profile.

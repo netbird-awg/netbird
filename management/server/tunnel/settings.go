@@ -89,6 +89,17 @@ func prepareProfileUpdate(
 	peers []*sharedtypes.ComponentPeer,
 	now time.Time,
 ) (bool, error) {
+	if updated.TunnelProfileAction == types.TunnelProfileActionCancelPending &&
+		current.TunnelProfilePending == nil {
+		updated.TunnelProfile = cloneProfile(current.TunnelProfile)
+		updated.TunnelProfilePending = nil
+		updated.TunnelProfilePrevious = cloneProfile(
+			current.TunnelProfilePrevious,
+		)
+		updated.TunnelProfileGraceUntil = current.TunnelProfileGraceUntil
+		updated.TunnelProfileAction = ""
+		return false, nil
+	}
 	expiredPreviousCleared := false
 	updated.TunnelProfilePending = cloneProfile(
 		current.TunnelProfilePending,
@@ -114,6 +125,8 @@ func prepareProfileUpdate(
 		changed, err = activatePendingProfile(updated, current, peers, now)
 	case types.TunnelProfileActionRollback:
 		changed, err = stageProfileRollback(updated, current, now)
+	case types.TunnelProfileActionCancelPending:
+		changed, err = cancelPendingProfile(updated, current, now)
 	default:
 		return false, fmt.Errorf(
 			"unsupported tunnel profile action %q",
@@ -241,6 +254,33 @@ func stageProfileRollback(
 	updated.TunnelProfilePending.Revision = nextRevision
 	updated.TunnelProfilePending.UpdatedAt = now
 	updated.TunnelProfileAction = ""
+	return true, nil
+}
+
+func cancelPendingProfile(
+	updated,
+	current *types.Settings,
+	now time.Time,
+) (bool, error) {
+	updated.TunnelProfilePending = nil
+	updated.TunnelProfileAction = ""
+	if current.TunnelProfile == nil {
+		updated.TunnelProfile = nil
+		return true, nil
+	}
+
+	nextRevision, err := nextProfileRevision(
+		current.TunnelProfile,
+		current.TunnelProfilePending,
+		current.TunnelProfilePrevious,
+	)
+	if err != nil {
+		return false, err
+	}
+	recovery := cloneProfile(current.TunnelProfile)
+	recovery.Revision = nextRevision
+	recovery.UpdatedAt = now
+	updated.TunnelProfile = recovery
 	return true, nil
 }
 

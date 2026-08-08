@@ -506,6 +506,286 @@ func TestPrepareSettingsUpdateActivatesMonotonicRollback(t *testing.T) {
 	}
 }
 
+func TestPrepareSettingsUpdateCancelsPendingWithMonotonicActive(t *testing.T) {
+	now := time.Now().UTC()
+	active := validAWG3TunnelProfile(7, now.Add(-time.Hour))
+	active.HeaderProtectionKey = bytes.Repeat([]byte{0x42}, 32)
+	pending := validAWG3TunnelProfile(8, now.Add(-time.Minute))
+	pending.HeaderProtectionKey = bytes.Repeat([]byte{0x24}, 32)
+	previous := validTunnelProfile(6, now.Add(-2*time.Hour))
+	graceUntil := now.Add(time.Hour)
+	current := &types.Settings{
+		TunnelPolicy:            types.TunnelAccountPolicyPreferAWG,
+		TunnelProfile:           active,
+		TunnelProfilePending:    pending,
+		TunnelProfilePrevious:   previous,
+		TunnelProfileGraceUntil: graceUntil,
+	}
+	updated := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionCancelPending,
+	}
+
+	changed, err := PrepareSettingsUpdate(updated, current, now)
+	if err != nil {
+		t.Fatalf("cancel pending profile: %v", err)
+	}
+	if !changed || updated.TunnelProfile == nil ||
+		updated.TunnelProfile.Revision != 9 ||
+		!updated.TunnelProfile.UpdatedAt.Equal(now) ||
+		updated.TunnelProfilePending != nil ||
+		updated.TunnelProfileAction != "" ||
+		updated.TunnelProfilePrevious == nil ||
+		updated.TunnelProfilePrevious.Revision != 6 ||
+		!updated.TunnelProfileGraceUntil.Equal(graceUntil) ||
+		!sameProfileContents(updated.TunnelProfile, active) ||
+		!bytes.Equal(
+			updated.TunnelProfile.HeaderProtectionKey,
+			active.HeaderProtectionKey,
+		) {
+		t.Fatalf("unexpected cancelled state: %+v", updated)
+	}
+	updated.TunnelProfile.Parameters[0] ^= 0xff
+	updated.TunnelProfile.HeaderProtectionKey[0] ^= 0xff
+	if bytes.Equal(updated.TunnelProfile.Parameters, active.Parameters) ||
+		bytes.Equal(
+			updated.TunnelProfile.HeaderProtectionKey,
+			active.HeaderProtectionKey,
+		) {
+		t.Fatal("cancelled active profile was not deeply cloned")
+	}
+}
+
+func TestPrepareSettingsUpdateCancelPreservesEncryptedAWG3Secret(t *testing.T) {
+	now := time.Now().UTC()
+	encryptionKey, err := crypt.GenerateKey()
+	if err != nil {
+		t.Fatalf("generate field encryption key: %v", err)
+	}
+	fieldEncrypt, err := crypt.NewFieldEncrypt(encryptionKey)
+	if err != nil {
+		t.Fatalf("create field encryptor: %v", err)
+	}
+	active := validAWG3TunnelProfile(7, now.Add(-time.Hour))
+	active.HeaderProtectionKey = bytes.Repeat([]byte{0x42}, 32)
+	if err := active.EncryptSensitiveData(fieldEncrypt); err != nil {
+		t.Fatalf("encrypt active AWG3 profile: %v", err)
+	}
+	current := &types.Settings{
+		TunnelProfile:        active,
+		TunnelProfilePending: validTunnelProfile(8, now.Add(-time.Minute)),
+	}
+	updated := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionCancelPending,
+	}
+
+	if _, err := PrepareSettingsUpdate(updated, current, now); err != nil {
+		t.Fatalf("cancel encrypted AWG3 profile: %v", err)
+	}
+	if updated.TunnelProfile == nil ||
+		updated.TunnelProfile.Revision != 9 ||
+		len(updated.TunnelProfile.HeaderProtectionKey) != 0 ||
+		updated.TunnelProfile.EncryptedHeaderProtectionKey !=
+			active.EncryptedHeaderProtectionKey {
+		t.Fatalf("encrypted active secret was not preserved: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateCancelRestoresAWG2FromAWG3Pending(t *testing.T) {
+	now := time.Now().UTC()
+	active := validTunnelProfile(7, now.Add(-time.Hour))
+	pending := validAWG3TunnelProfile(8, now.Add(-time.Minute))
+	pending.HeaderProtectionKey = bytes.Repeat([]byte{0x24}, 32)
+	current := &types.Settings{
+		TunnelProfile:        active,
+		TunnelProfilePending: pending,
+	}
+	updated := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionCancelPending,
+	}
+
+	if _, err := PrepareSettingsUpdate(updated, current, now); err != nil {
+		t.Fatalf("cancel AWG3 pending profile: %v", err)
+	}
+	if updated.TunnelProfile == nil ||
+		updated.TunnelProfile.Revision != 9 ||
+		!sameProfileContents(updated.TunnelProfile, active) ||
+		updated.TunnelProfilePending != nil {
+		t.Fatalf("AWG2 active profile was not restored: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateCancelWithoutActiveProfile(t *testing.T) {
+	for _, policy := range []types.TunnelAccountPolicy{
+		types.TunnelAccountPolicyStandard,
+		types.TunnelAccountPolicyPreferAWG,
+	} {
+		t.Run(string(policy), func(t *testing.T) {
+			current := &types.Settings{
+				TunnelPolicy: policy,
+				TunnelProfilePending: validTunnelProfile(
+					4,
+					time.Now().UTC(),
+				),
+			}
+			updated := &types.Settings{
+				TunnelPolicy:        policy,
+				TunnelProfileAction: types.TunnelProfileActionCancelPending,
+			}
+
+			changed, err := PrepareSettingsUpdate(
+				updated,
+				current,
+				time.Now().UTC(),
+			)
+			if err != nil {
+				t.Fatalf("cancel initial pending profile: %v", err)
+			}
+			if !changed || updated.TunnelProfile != nil ||
+				updated.TunnelProfilePending != nil ||
+				updated.TunnelProfileAction != "" {
+				t.Fatalf("initial pending profile was not cleared: %+v", updated)
+			}
+		})
+	}
+}
+
+func TestPrepareSettingsUpdateCancelWithoutActiveRejectsRequireAWG(t *testing.T) {
+	now := time.Now().UTC()
+	current := &types.Settings{
+		TunnelPolicy:         types.TunnelAccountPolicyRequireAWG,
+		TunnelProfilePending: validTunnelProfile(4, now),
+	}
+	updated := &types.Settings{
+		TunnelPolicy:        types.TunnelAccountPolicyRequireAWG,
+		TunnelProfileAction: types.TunnelProfileActionCancelPending,
+	}
+	before := updated.Copy()
+
+	if _, err := PrepareSettingsUpdate(updated, current, now); err == nil {
+		t.Fatal("required AWG cancellation without active profile was accepted")
+	}
+	if !reflect.DeepEqual(before, updated) {
+		t.Fatalf("rejected cancellation mutated settings: before=%+v after=%+v", before, updated)
+	}
+}
+
+func TestPrepareSettingsUpdateCancelAllowsRequireAWGDowngrade(t *testing.T) {
+	now := time.Now().UTC()
+	current := &types.Settings{
+		TunnelPolicy:         types.TunnelAccountPolicyRequireAWG,
+		TunnelProfilePending: validTunnelProfile(4, now),
+	}
+	updated := &types.Settings{
+		TunnelPolicy:        types.TunnelAccountPolicyPreferAWG,
+		TunnelProfileAction: types.TunnelProfileActionCancelPending,
+	}
+
+	changed, err := PrepareSettingsUpdate(updated, current, now)
+	if err != nil {
+		t.Fatalf("cancel pending with policy downgrade: %v", err)
+	}
+	if !changed || updated.TunnelProfile != nil ||
+		updated.TunnelProfilePending != nil ||
+		updated.TunnelPolicy != types.TunnelAccountPolicyPreferAWG {
+		t.Fatalf("policy downgrade did not cancel pending profile: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateCancelWithoutPendingIsNoOp(t *testing.T) {
+	now := time.Now().UTC()
+	active := validTunnelProfile(9, now.Add(-time.Hour))
+	previous := validTunnelProfile(8, now.Add(-2*time.Hour))
+	graceUntil := now.Add(-time.Minute)
+	current := &types.Settings{
+		TunnelPolicy:            types.TunnelAccountPolicyPreferAWG,
+		TunnelProfile:           active,
+		TunnelProfilePrevious:   previous,
+		TunnelProfileGraceUntil: graceUntil,
+	}
+	updated := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionCancelPending,
+	}
+
+	changed, err := PrepareSettingsUpdate(updated, current, now)
+	if err != nil {
+		t.Fatalf("repeat pending cancellation: %v", err)
+	}
+	if changed || updated.TunnelProfile == nil ||
+		updated.TunnelProfile.Revision != 9 ||
+		!updated.TunnelProfile.UpdatedAt.Equal(active.UpdatedAt) ||
+		updated.TunnelProfilePrevious == nil ||
+		updated.TunnelProfilePrevious.Revision != 8 ||
+		!updated.TunnelProfileGraceUntil.Equal(graceUntil) ||
+		updated.TunnelProfileAction != "" {
+		t.Fatalf("repeat cancellation changed settings: %+v", updated)
+	}
+}
+
+func TestPrepareSettingsUpdateCancelRejectsRevisionOverflow(t *testing.T) {
+	now := time.Now().UTC()
+	current := &types.Settings{
+		TunnelProfile: validTunnelProfile(
+			^uint64(0)-1,
+			now.Add(-time.Hour),
+		),
+		TunnelProfilePending: validTunnelProfile(
+			^uint64(0),
+			now.Add(-time.Minute),
+		),
+	}
+	updated := &types.Settings{
+		TunnelPolicy:            types.TunnelAccountPolicyPreferAWG,
+		TunnelPolicyUpdatedAt:   now.Add(-3 * time.Hour),
+		TunnelProfile:           validTunnelProfile(20, now),
+		TunnelProfilePending:    validTunnelProfile(21, now),
+		TunnelProfilePrevious:   validTunnelProfile(22, now),
+		TunnelProfileGraceUntil: now.Add(time.Hour),
+		TunnelProfileAction:     types.TunnelProfileActionCancelPending,
+	}
+	before := updated.Copy()
+
+	if _, err := PrepareSettingsUpdate(updated, current, now); err == nil {
+		t.Fatal("cancel revision overflow was accepted")
+	}
+	if !reflect.DeepEqual(before, updated) {
+		t.Fatalf("cancel overflow mutated settings: before=%+v after=%+v", before, updated)
+	}
+}
+
+func TestPrepareSettingsUpdateRollbackAfterCancelUsesNextRevision(t *testing.T) {
+	now := time.Now().UTC()
+	current := &types.Settings{
+		TunnelProfile:           validTunnelProfile(7, now.Add(-time.Hour)),
+		TunnelProfilePending:    validTunnelProfile(8, now.Add(-time.Minute)),
+		TunnelProfilePrevious:   validTunnelProfile(6, now.Add(-2*time.Hour)),
+		TunnelProfileGraceUntil: now.Add(time.Hour),
+	}
+	cancelled := &types.Settings{
+		TunnelProfileAction: types.TunnelProfileActionCancelPending,
+	}
+	if _, err := PrepareSettingsUpdate(cancelled, current, now); err != nil {
+		t.Fatalf("cancel pending profile: %v", err)
+	}
+	rollback := cancelled.Copy()
+	rollback.TunnelProfileAction = types.TunnelProfileActionRollback
+
+	if _, err := PrepareSettingsUpdate(
+		rollback,
+		cancelled,
+		now.Add(time.Minute),
+	); err != nil {
+		t.Fatalf("rollback after cancel: %v", err)
+	}
+	if rollback.TunnelProfilePending == nil ||
+		rollback.TunnelProfilePending.Revision != 10 ||
+		!sameProfileContents(
+			rollback.TunnelProfilePending,
+			current.TunnelProfilePrevious,
+		) {
+		t.Fatalf("rollback did not advance after cancel: %+v", rollback)
+	}
+}
+
 func TestPrepareSettingsUpdateClearsExpiredRollbackProfile(t *testing.T) {
 	now := time.Now().UTC()
 	current := &types.Settings{

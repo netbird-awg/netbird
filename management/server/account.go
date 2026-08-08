@@ -311,6 +311,7 @@ func (am *DefaultAccountManager) UpdateAccountSettings(ctx context.Context, acco
 		if err != nil {
 			return err
 		}
+		tunnelNow := time.Now().UTC()
 
 		var tunnelPeers []*sharedtypes.ComponentPeer
 		if newSettings.TunnelProfileAction ==
@@ -334,14 +335,20 @@ func (am *DefaultAccountManager) UpdateAccountSettings(ctx context.Context, acco
 				len(peers),
 			)
 			for _, peer := range peers {
-				tunnelPeers = append(tunnelPeers, peer.ToComponent())
+				if tunnelProfileActivationPeerEligible(
+					peer,
+					oldSettings.TunnelProfilePending,
+					tunnelNow,
+				) {
+					tunnelPeers = append(tunnelPeers, peer.ToComponent())
+				}
 			}
 		}
 
 		tunnelSettingsChanged, err := managementtunnel.PrepareSettingsUpdate(
 			newSettings,
 			oldSettings,
-			time.Now().UTC(),
+			tunnelNow,
 			tunnelPeers,
 		)
 		if err != nil {
@@ -520,6 +527,45 @@ func (am *DefaultAccountManager) UpdateAccountSettings(ctx context.Context, acco
 	}
 
 	return newSettings, nil
+}
+
+// Bound activation checks to peers observed during the current rollout window.
+const tunnelProfileActivationActivityWindow = 10 * time.Minute
+
+// Activation eligibility requires recent persisted activity or a recent runtime
+// report for the current transition. Connected is diagnostic state and can be
+// stale after a Management crash, so it must never make a peer eligible.
+func tunnelProfileActivationPeerEligible(
+	peer *nbpeer.Peer,
+	pending *types.TunnelProfile,
+	now time.Time,
+) bool {
+	if peer == nil ||
+		(!peer.SupportsHybridAmneziaWG2() &&
+			!peer.SupportsHybridAmneziaWG3()) {
+		return false
+	}
+	if peer.Status != nil &&
+		(peer.Status.LoginExpired || peer.Status.RequiresApproval) {
+		return false
+	}
+
+	lastSeen := time.Time{}
+	if peer.Status != nil {
+		lastSeen = peer.Status.LastSeen
+	}
+	recentCutoff := now.Add(-tunnelProfileActivationActivityWindow)
+	recentlyActive := !lastSeen.IsZero() &&
+		!lastSeen.Before(recentCutoff) &&
+		!lastSeen.After(now)
+
+	runtimeUpdatedAt := peer.Meta.TunnelRuntime.UpdatedAt
+	reportedCurrentTransition := pending != nil &&
+		!runtimeUpdatedAt.IsZero() &&
+		!runtimeUpdatedAt.Before(pending.UpdatedAt) &&
+		!runtimeUpdatedAt.Before(recentCutoff) &&
+		!runtimeUpdatedAt.After(now)
+	return recentlyActive || reportedCurrentTransition
 }
 
 func tunnelProfilesEqual(left, right *types.TunnelProfile) bool {

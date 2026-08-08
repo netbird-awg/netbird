@@ -170,6 +170,74 @@ func TestPendingProfileBlocksRequireAWGUntilActivation(t *testing.T) {
 	}
 }
 
+func TestReturningPeerWaitsForCancelledProfileRevision(t *testing.T) {
+	now := time.Now().UTC()
+	for _, test := range []struct {
+		name   string
+		policy types.TunnelAccountPolicy
+		mode   proto.TunnelMode
+	}{
+		{
+			name:   "prefer stays standard",
+			policy: types.TunnelAccountPolicyPreferAWG,
+			mode:   proto.TunnelMode_TunnelModeStandard,
+		},
+		{
+			name:   "require stays blocked",
+			policy: types.TunnelAccountPolicyRequireAWG,
+			mode:   proto.TunnelMode_TunnelModeBlocked,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			settings := plannerSettings(now.Add(-time.Minute))
+			settings.TunnelPolicy = test.policy
+			settings.TunnelProfile.Revision = 9
+			returning := plannerPeer("returning", now.Add(-time.Hour))
+			returning.TunnelRuntime.ProfileRevision = 8
+			returning.TunnelRuntime.Ready = false
+			ready := plannerPeer("ready", now)
+			ready.TunnelRuntime.ProfileRevision = 9
+			ready.TunnelRuntime.LastReadyRevision = 9
+
+			profile := ProfileForPeer(returning, settings, now)
+			if profile == nil || profile.GetRevision() != 9 {
+				t.Fatalf("returning peer profile = %+v, want revision 9", profile)
+			}
+			config := PlanPeerConfigs(
+				returning,
+				[]*sharedtypes.ComponentPeer{ready},
+				settings,
+				nil,
+				now,
+			)[ready.ID]
+			if config.Mode != test.mode {
+				t.Fatalf("returning peer mode = %s, want %s", config.Mode, test.mode)
+			}
+
+			returning.TunnelRuntime.ProtocolVersion =
+				clienttunnel.ProtocolAmneziaWG2
+			returning.TunnelRuntime.ProfileRevision = 9
+			returning.TunnelRuntime.AdapterRevision =
+				HybridAWG2AdapterRevision
+			returning.TunnelRuntime.Ready = true
+			returning.TunnelRuntime.LastReadyProtocol =
+				clienttunnel.ProtocolAmneziaWG2
+			returning.TunnelRuntime.LastReadyRevision = 9
+			returning.TunnelRuntime.LastReadyAt = now
+			config = PlanPeerConfigs(
+				returning,
+				[]*sharedtypes.ComponentPeer{ready},
+				settings,
+				nil,
+				now,
+			)[ready.ID]
+			if config.Mode != proto.TunnelMode_TunnelModeAmneziaWG {
+				t.Fatalf("ready returning peer mode = %s, want AWG", config.Mode)
+			}
+		})
+	}
+}
+
 func TestPlanPeerConfigsUsesAWG3ForTwoAWG3Peers(t *testing.T) {
 	now := time.Now().UTC()
 	settings := plannerAWG3Settings(now.Add(-time.Minute))
