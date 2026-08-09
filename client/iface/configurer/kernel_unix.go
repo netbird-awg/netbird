@@ -16,13 +16,34 @@ import (
 )
 
 type KernelConfigurer struct {
-	deviceName string
-	statsCache *statsCache
+	deviceName     string
+	statsCache     *statsCache
+	controlFactory kernelControlFactory
 }
 
 func NewKernelConfigurer(deviceName string) *KernelConfigurer {
+	return newKernelConfigurer(deviceName, newWGControl)
+}
+
+type kernelControl interface {
+	Close() error
+	ConfigureDevice(name string, config wgtypes.Config) error
+	Device(name string) (*wgtypes.Device, error)
+}
+
+type kernelControlFactory func() (kernelControl, error)
+
+func newWGControl() (kernelControl, error) {
+	return wgctrl.New()
+}
+
+func newKernelConfigurer(
+	deviceName string,
+	controlFactory kernelControlFactory,
+) *KernelConfigurer {
 	c := &KernelConfigurer{
-		deviceName: deviceName,
+		deviceName:     deviceName,
+		controlFactory: controlFactory,
 	}
 	c.statsCache = newStatsCache(statsCacheTTL, c.fetchStats)
 	return c
@@ -215,18 +236,7 @@ func (c *KernelConfigurer) RemoveAllowedIP(peerKey string, allowedIP netip.Prefi
 }
 
 func (c *KernelConfigurer) getPeer(ifaceName, peerPubKey string) (wgtypes.Peer, error) {
-	wg, err := wgctrl.New()
-	if err != nil {
-		return wgtypes.Peer{}, fmt.Errorf("wgctl: %w", err)
-	}
-	defer func() {
-		err = wg.Close()
-		if err != nil {
-			log.Errorf("Got error while closing wgctl: %v", err)
-		}
-	}()
-
-	wgDevice, err := wg.Device(ifaceName)
+	wgDevice, err := c.device(ifaceName)
 	if err != nil {
 		return wgtypes.Peer{}, fmt.Errorf("get device %s: %w", ifaceName, err)
 	}
@@ -239,7 +249,7 @@ func (c *KernelConfigurer) getPeer(ifaceName, peerPubKey string) (wgtypes.Peer, 
 }
 
 func (c *KernelConfigurer) configure(config wgtypes.Config) error {
-	wg, err := wgctrl.New()
+	wg, err := c.controlFactory()
 	if err != nil {
 		return err
 	}
@@ -256,18 +266,7 @@ func (c *KernelConfigurer) Close() {
 }
 
 func (c *KernelConfigurer) FullStats() (*Stats, error) {
-	wg, err := wgctrl.New()
-	if err != nil {
-		return nil, fmt.Errorf("wgctl: %w", err)
-	}
-	defer func() {
-		err = wg.Close()
-		if err != nil {
-			log.Errorf("Got error while closing wgctl: %v", err)
-		}
-	}()
-
-	wgDevice, err := wg.Device(c.deviceName)
+	wgDevice, err := c.device(c.deviceName)
 	if err != nil {
 		return nil, fmt.Errorf("get device %s: %w", c.deviceName, err)
 	}
@@ -306,18 +305,7 @@ func (c *KernelConfigurer) LastActivities() map[string]monotime.Time {
 
 func (c *KernelConfigurer) fetchStats() (map[string]WGStats, error) {
 	stats := make(map[string]WGStats)
-	wg, err := wgctrl.New()
-	if err != nil {
-		return nil, fmt.Errorf("wgctl: %w", err)
-	}
-	defer func() {
-		err = wg.Close()
-		if err != nil {
-			log.Errorf("Got error while closing wgctl: %v", err)
-		}
-	}()
-
-	wgDevice, err := wg.Device(c.deviceName)
+	wgDevice, err := c.device(c.deviceName)
 	if err != nil {
 		return nil, fmt.Errorf("get device %s: %w", c.deviceName, err)
 	}
@@ -330,4 +318,18 @@ func (c *KernelConfigurer) fetchStats() (map[string]WGStats, error) {
 		}
 	}
 	return stats, nil
+}
+
+func (c *KernelConfigurer) device(name string) (*wgtypes.Device, error) {
+	wg, err := c.controlFactory()
+	if err != nil {
+		return nil, fmt.Errorf("open kernel control: %w", err)
+	}
+	defer func() {
+		if err := wg.Close(); err != nil {
+			log.Errorf("Failed to close kernel control: %v", err)
+		}
+	}()
+
+	return wg.Device(name)
 }
