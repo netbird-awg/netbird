@@ -68,6 +68,7 @@ type WGIFaceOpts struct {
 	TransportNet   transport.Net
 	DisableDNS     bool
 	ForceUserspace bool
+	UseAWGKernel   bool
 }
 
 // WGIface represents an interface instance
