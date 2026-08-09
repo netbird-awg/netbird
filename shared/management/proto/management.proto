@@ -244,6 +244,8 @@ enum PeerCapability {
   PeerCapabilityHybridAmneziaWG2 = 4;
   // Client supports per-peer standard WireGuard and AmneziaWG v3.
   PeerCapabilityHybridAmneziaWG3 = 5;
+  // Linux client has a compatible per-peer AmneziaWG kernel backend.
+  PeerCapabilityKernelAmneziaWG = 6;
 }
 
 // PeerSystemMeta is machine meta data like OS and version.
