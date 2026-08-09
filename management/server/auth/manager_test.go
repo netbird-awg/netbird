@@ -269,6 +269,7 @@ func TestAuthManager_ValidateAndParseToken(t *testing.T) {
 		return fmt.Sprintf("%s/%s", audience, name)
 	}
 
+	issuedAt := time.Now().UTC().Truncate(time.Second)
 	lastLogin := time.Date(2025, 2, 12, 14, 25, 26, 0, time.UTC) //"2025-02-12T14:25:26.186Z"
 
 	tests := []struct {
@@ -284,8 +285,8 @@ func TestAuthManager_ValidateAndParseToken(t *testing.T) {
 				token.Claims = jwt.MapClaims{
 					"iss":                                   issuer,
 					"aud":                                   []string{audience},
-					"iat":                                   time.Now().Unix(),
-					"exp":                                   time.Now().Add(time.Hour * 1).Unix(),
+					"iat":                                   issuedAt.Unix(),
+					"exp":                                   issuedAt.Add(time.Hour).Unix(),
 					"sub":                                   "user-id|123",
 					customClaim(nbjwt.AccountIDSuffix):      "account-id|567",
 					customClaim(nbjwt.DomainIDSuffix):       "http://localhost",
@@ -303,6 +304,7 @@ func TestAuthManager_ValidateAndParseToken(t *testing.T) {
 				DomainCategory: "private",
 				LastLogin:      lastLogin,
 				Invited:        false,
+				IssuedAt:       issuedAt,
 			},
 		},
 		{
@@ -313,15 +315,16 @@ func TestAuthManager_ValidateAndParseToken(t *testing.T) {
 				token.Claims = jwt.MapClaims{
 					"iss": issuer,
 					"aud": []string{audience},
-					"iat": time.Now().Unix(),
-					"exp": time.Now().Add(time.Hour).Unix(),
+					"iat": issuedAt.Unix(),
+					"exp": issuedAt.Add(time.Hour).Unix(),
 					"sub": "user-id|123",
 				}
 				tokenString, _ := token.SignedString(key)
 				return tokenString
 			},
 			expected: &nbauth.UserAuth{
-				UserId: "user-id|123",
+				UserId:   "user-id|123",
+				IssuedAt: issuedAt,
 			},
 		},
 		{
@@ -433,7 +436,14 @@ func TestAuthManager_ValidateAndParseToken(t *testing.T) {
 			if tt.expected != nil {
 				assert.NoError(t, err)
 				assert.True(t, token.Valid)
-				assert.Equal(t, *tt.expected, userAuth)
+				expected := *tt.expected
+				assert.True(
+					t,
+					expected.IssuedAt.Equal(userAuth.IssuedAt),
+					"issued-at claim should preserve its instant",
+				)
+				expected.IssuedAt = userAuth.IssuedAt
+				assert.Equal(t, expected, userAuth)
 			} else {
 				assert.Error(t, err)
 				assert.Nil(t, token)
