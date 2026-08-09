@@ -20,42 +20,84 @@ import (
 )
 
 type TunKernelDevice struct {
-	name         string
-	address      wgaddr.Address
-	wgPort       int
-	key          string
-	mtu          uint16
-	ctx          context.Context
-	ctxCancel    context.CancelFunc
-	transportNet transport.Net
+	name              string
+	address           wgaddr.Address
+	wgPort            int
+	key               string
+	mtu               uint16
+	ctx               context.Context
+	ctxCancel         context.CancelFunc
+	transportNet      transport.Net
+	linkFactory       kernelLinkFactory
+	configurerFactory kernelConfigurerFactory
 
 	link       *wgLink
 	udpMuxConn net.PacketConn
 	udpMux     *udpmux.UniversalUDPMuxDefault
 }
 
+type kernelLinkFactory func(name string) *wgLink
+
+type kernelConfigurerFactory func(deviceName string) (WGConfigurer, error)
+
 func NewKernelDevice(name string, address wgaddr.Address, wgPort int, key string, mtu uint16, transportNet transport.Net) *TunKernelDevice {
+	return newKernelDevice(
+		name,
+		address,
+		wgPort,
+		key,
+		mtu,
+		transportNet,
+		newWGLink,
+		func(deviceName string) (WGConfigurer, error) {
+			return configurer.NewKernelConfigurer(deviceName), nil
+		},
+	)
+}
+
+func newKernelDevice(
+	name string,
+	address wgaddr.Address,
+	wgPort int,
+	key string,
+	mtu uint16,
+	transportNet transport.Net,
+	linkFactory kernelLinkFactory,
+	configurerFactory kernelConfigurerFactory,
+) *TunKernelDevice {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &TunKernelDevice{
-		ctx:          ctx,
-		ctxCancel:    cancel,
-		name:         name,
-		address:      address,
-		wgPort:       wgPort,
-		key:          key,
-		mtu:          mtu,
-		transportNet: transportNet,
+		ctx:               ctx,
+		ctxCancel:         cancel,
+		name:              name,
+		address:           address,
+		wgPort:            wgPort,
+		key:               key,
+		mtu:               mtu,
+		transportNet:      transportNet,
+		linkFactory:       linkFactory,
+		configurerFactory: configurerFactory,
 	}
 }
 
 func (t *TunKernelDevice) Create() (WGConfigurer, error) {
-	link := newWGLink(t.name)
+	link := t.linkFactory(t.name)
 
 	if err := link.recreate(); err != nil {
 		return nil, fmt.Errorf("recreate: %w", err)
 	}
 
 	t.link = link
+	created := false
+	defer func() {
+		if created {
+			return
+		}
+		if err := link.Close(); err != nil {
+			log.Debugf("failed to clean up interface %s: %v", t.name, err)
+		}
+		t.link = nil
+	}()
 
 	if err := t.assignAddr(); err != nil {
 		return nil, fmt.Errorf("assign addr: %w", err)
@@ -68,13 +110,18 @@ func (t *TunKernelDevice) Create() (WGConfigurer, error) {
 		return nil, fmt.Errorf("set mtu: %w", err)
 	}
 
-	configurer := configurer.NewKernelConfigurer(t.name)
+	wgConfigurer, err := t.configurerFactory(t.name)
+	if err != nil {
+		return nil, fmt.Errorf("create kernel configurer: %w", err)
+	}
 
-	if err := configurer.ConfigureInterface(t.key, t.wgPort); err != nil {
+	if err := wgConfigurer.ConfigureInterface(t.key, t.wgPort); err != nil {
+		wgConfigurer.Close()
 		return nil, fmt.Errorf("error configuring interface: %s", err)
 	}
 
-	return configurer, nil
+	created = true
+	return wgConfigurer, nil
 }
 
 func (t *TunKernelDevice) Up() (*udpmux.UniversalUDPMuxDefault, error) {
