@@ -23,6 +23,7 @@ const (
 	PeerCapabilityComponentNetworkMap int32 = 3
 	PeerCapabilityHybridAmneziaWG2    int32 = 4
 	PeerCapabilityHybridAmneziaWG3    int32 = 5
+	PeerCapabilityKernelAmneziaWG     int32 = 6
 )
 
 // Peer represents a machine connected to the network.
@@ -249,6 +250,8 @@ func (p *Peer) ToComponent() *sharedTypes.ComponentPeer {
 		AddedWithSSOLogin:      p.AddedWithSSOLogin(),
 		SupportsHybridAWG2:     p.SupportsHybridAmneziaWG2(),
 		SupportsHybridAWG3:     p.SupportsHybridAmneziaWG3(),
+		KernelAWGRequired:      p.Meta.GoOS == "linux",
+		SupportsKernelAWG:      p.SupportsKernelAmneziaWG(),
 		TunnelRuntime: sharedTypes.TunnelRuntimeInfo{
 			ProtocolVersion:   p.Meta.TunnelRuntime.ProtocolVersion,
 			ProfileRevision:   p.Meta.TunnelRuntime.ProfileRevision,
@@ -300,6 +303,12 @@ func (p *Peer) SupportsHybridAmneziaWG2() bool {
 // retaining per-peer standard WireGuard and AWG2 modes.
 func (p *Peer) SupportsHybridAmneziaWG3() bool {
 	return p.HasCapability(PeerCapabilityHybridAmneziaWG3)
+}
+
+// SupportsKernelAmneziaWG reports whether the peer has a compatible Linux
+// kernel AWG backend.
+func (p *Peer) SupportsKernelAmneziaWG() bool {
+	return p.HasCapability(PeerCapabilityKernelAmneziaWG)
 }
 
 func capabilitiesEqual(a, b []int32) bool {

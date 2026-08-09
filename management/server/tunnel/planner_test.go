@@ -122,6 +122,21 @@ func TestProfileForPeerUsesResponseTime(t *testing.T) {
 	}
 }
 
+func TestProfileForPeerRequiresLinuxKernelCapability(t *testing.T) {
+	now := time.Now().UTC()
+	settings := plannerSettings(now.Add(-time.Minute))
+	peer := plannerPeer("peer", now.Add(-time.Minute))
+	peer.KernelAWGRequired = true
+
+	if profile := ProfileForPeer(peer, settings, now); profile != nil {
+		t.Fatalf("Linux peer without kernel capability received profile: %+v", profile)
+	}
+	peer.SupportsKernelAWG = true
+	if profile := ProfileForPeer(peer, settings, now); profile == nil {
+		t.Fatal("Linux peer with kernel capability did not receive profile")
+	}
+}
+
 func TestPendingProfileIsDistributedWithoutActivation(t *testing.T) {
 	now := time.Now().UTC()
 	settings := plannerSettings(now.Add(-time.Minute))

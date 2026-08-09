@@ -164,3 +164,15 @@ func TestPeerCapabilities(t *testing.T) {
 		})
 	}
 }
+
+func TestPeerKernelAWGCapability(t *testing.T) {
+	peer := &Peer{Meta: PeerSystemMeta{
+		GoOS:         "linux",
+		Capabilities: []int32{PeerCapabilityKernelAmneziaWG},
+	}}
+
+	assert.True(t, peer.SupportsKernelAmneziaWG())
+	component := peer.ToComponent()
+	assert.True(t, component.KernelAWGRequired)
+	assert.True(t, component.SupportsKernelAWG)
+}

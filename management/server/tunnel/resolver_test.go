@@ -40,6 +40,39 @@ func TestResolvePairLegacyFallback(t *testing.T) {
 	}
 }
 
+func TestResolvePairPreferAWGFallsBackWithoutRequiredKernel(t *testing.T) {
+	linuxPeer := readyPeer()
+	linuxPeer.KernelAWGRequired = true
+
+	decision := ResolvePair(
+		AccountPolicyPreferAWG,
+		linuxPeer,
+		readyPeer(),
+		PairState{Mode: proto.TunnelMode_TunnelModeAmneziaWG},
+	)
+
+	if decision.Blocked || decision.Pending ||
+		decision.Mode != proto.TunnelMode_TunnelModeStandard {
+		t.Fatalf("unexpected kernel fallback decision: %+v", decision)
+	}
+}
+
+func TestResolvePairRequireAWGBlocksWithoutRequiredKernel(t *testing.T) {
+	linuxPeer := readyPeer()
+	linuxPeer.KernelAWGRequired = true
+
+	decision := ResolvePair(
+		AccountPolicyRequireAWG,
+		linuxPeer,
+		readyPeer(),
+		PairState{},
+	)
+
+	if !decision.Blocked || decision.Pending {
+		t.Fatalf("required AWG accepted missing kernel: %+v", decision)
+	}
+}
+
 func TestResolvePairDoesNotDowngradeUnreadyHybridPeer(t *testing.T) {
 	ready := readyPeer()
 	unready := ready

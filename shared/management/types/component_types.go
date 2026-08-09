@@ -28,6 +28,8 @@ type ComponentPeer struct {
 	LastLogin              time.Time
 	SupportsHybridAWG2     bool
 	SupportsHybridAWG3     bool
+	KernelAWGRequired      bool
+	SupportsKernelAWG      bool
 	TunnelRuntime          TunnelRuntimeInfo
 }
 
