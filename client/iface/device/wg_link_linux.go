@@ -16,14 +16,24 @@ import (
 
 type wgLink struct {
 	attrs *netlink.LinkAttrs
+	kind  string
 }
 
 func newWGLink(name string) *wgLink {
+	return newWGLinkWithKind(name, "wireguard")
+}
+
+func newAWGLink(name string) *wgLink {
+	return newWGLinkWithKind(name, "amneziawg")
+}
+
+func newWGLinkWithKind(name, kind string) *wgLink {
 	attrs := netlink.NewLinkAttrs()
 	attrs.Name = name
 
 	return &wgLink{
 		attrs: &attrs,
+		kind:  kind,
 	}
 }
 
@@ -34,7 +44,7 @@ func (l *wgLink) Attrs() *netlink.LinkAttrs {
 
 // Type returns the interface type
 func (l *wgLink) Type() string {
-	return "wireguard"
+	return l.kind
 }
 
 // Close deletes the link interface
