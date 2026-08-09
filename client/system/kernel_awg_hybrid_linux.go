@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/netbirdio/netbird/client/iface/device"
+	"github.com/netbirdio/netbird/client/iface/netstack"
 )
 
 var kernelAWGProbe = newKernelAWGProbeCache(device.ProbeAWGKernel)
@@ -45,6 +46,22 @@ func (c *kernelAWGProbeCache) invalidate() {
 	c.mu.Unlock()
 }
 
+func (c *kernelAWGProbeCache) markUnavailable() {
+	c.mu.Lock()
+	c.checked = true
+	c.available = false
+	c.mu.Unlock()
+}
+
 func kernelAWGAvailable() bool {
+	if netstack.IsEnabled() {
+		return false
+	}
 	return kernelAWGProbe.isAvailable()
+}
+
+// MarkKernelAWGUnavailable prevents this process from advertising the kernel
+// backend again after setup fails.
+func MarkKernelAWGUnavailable() {
+	kernelAWGProbe.markUnavailable()
 }
