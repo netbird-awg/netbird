@@ -5,6 +5,8 @@ package configurer
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -25,6 +27,11 @@ var (
 type awgKernelControl interface {
 	kernelControl
 	capabilities(deviceName string) (AWGKernelCapabilities, error)
+	ConfigurePeer(
+		deviceName string,
+		peer wgtypes.PeerConfig,
+		persistentKeepaliveRange *uint32,
+	) error
 	ConfigurePeerTransport(
 		deviceName string,
 		peerKey wgtypes.Key,
@@ -158,6 +165,92 @@ func (c *AWGKernelConfigurer) SetPeerTunnelMode(
 	state.mode = mode
 	state.profileRevision = profileRevision
 	c.peerStates[key] = state
+	c.stateMu.Unlock()
+	return nil
+}
+
+// UpdatePeer updates an AmneziaWG kernel peer without discarding its timing
+// profile.
+func (c *AWGKernelConfigurer) UpdatePeer(
+	peerKey string,
+	allowedIPs []netip.Prefix,
+	keepAlive time.Duration,
+	endpoint *net.UDPAddr,
+	preSharedKey *wgtypes.Key,
+) error {
+	key, err := wgtypes.ParseKey(peerKey)
+	if err != nil {
+		return err
+	}
+
+	c.stateMu.RLock()
+	state := c.peerStates[key]
+	persistentRange, err := c.keepaliveRangeLocked(state.mode, keepAlive)
+	c.stateMu.RUnlock()
+	if err != nil {
+		return err
+	}
+
+	peer := wgtypes.PeerConfig{
+		PublicKey:                   key,
+		AllowedIPs:                  prefixesToIPNets(allowedIPs),
+		PersistentKeepaliveInterval: &keepAlive,
+		Endpoint:                    endpoint,
+		PresharedKey:                preSharedKey,
+	}
+	control, err := c.awgControlFactory()
+	if err != nil {
+		return fmt.Errorf("open AmneziaWG kernel control: %w", err)
+	}
+	defer closeAWGKernelControl(control)
+
+	if err := control.ConfigurePeer(c.deviceName, peer, &persistentRange); err != nil {
+		return fmt.Errorf(
+			"update peer on interface %s with allowed IPs %s and endpoint %v: %w",
+			c.deviceName,
+			allowedIPs,
+			endpoint,
+			err,
+		)
+	}
+
+	c.stateMu.Lock()
+	state.keepAlive = keepAlive
+	c.peerStates[key] = state
+	c.stateMu.Unlock()
+	return nil
+}
+
+// RemoveEndpointAddress removes an endpoint while preserving transport mode.
+func (c *AWGKernelConfigurer) RemoveEndpointAddress(peerKey string) error {
+	key, err := wgtypes.ParseKey(peerKey)
+	if err != nil {
+		return err
+	}
+	c.stateMu.RLock()
+	state, ok := c.peerStates[key]
+	c.stateMu.RUnlock()
+
+	if err := c.KernelConfigurer.RemoveEndpointAddress(peerKey); err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	return c.SetPeerTunnelMode(peerKey, state.mode, state.profileRevision)
+}
+
+// RemovePeer removes an AmneziaWG kernel peer and its local transport state.
+func (c *AWGKernelConfigurer) RemovePeer(peerKey string) error {
+	key, err := wgtypes.ParseKey(peerKey)
+	if err != nil {
+		return err
+	}
+	if err := c.KernelConfigurer.RemovePeer(peerKey); err != nil {
+		return err
+	}
+	c.stateMu.Lock()
+	delete(c.peerStates, key)
 	c.stateMu.Unlock()
 	return nil
 }
