@@ -445,6 +445,18 @@ func TestAdapterSupportsProtocolRequiresHardenedAWG3Revision(t *testing.T) {
 			protocolVersion: clienttunnel.ProtocolAmneziaWG2,
 			want:            true,
 		},
+		{
+			name:            "kernel adapter with AWG3 profile",
+			adapterRevision: clienttunnel.KernelAdapterRevision,
+			protocolVersion: clienttunnel.ProtocolAmneziaWG3,
+			want:            true,
+		},
+		{
+			name:            "kernel adapter with AWG2 profile",
+			adapterRevision: clienttunnel.KernelAdapterRevision,
+			protocolVersion: clienttunnel.ProtocolAmneziaWG2,
+			want:            true,
+		},
 	}
 
 	for _, test := range tests {

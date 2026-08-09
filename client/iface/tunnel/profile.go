@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	ProtocolAmneziaWG2 = "awg2"
-	ProtocolAmneziaWG3 = "awg3"
-	AdapterRevision    = "e8aa0b1ee8dc3475a079709ed19b61347e1aa9c1"
+	ProtocolAmneziaWG2    = "awg2"
+	ProtocolAmneziaWG3    = "awg3"
+	AdapterRevision       = "e8aa0b1ee8dc3475a079709ed19b61347e1aa9c1"
+	KernelAdapterRevision = "amneziawg-linux-v3-per-peer"
 
 	maxProfileParametersSize  = 32 * 1024
 	maxJunkPacketCount        = 32
