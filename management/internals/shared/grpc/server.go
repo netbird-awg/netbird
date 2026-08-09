@@ -48,6 +48,7 @@ import (
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/shared/management/proto"
 	internalStatus "github.com/netbirdio/netbird/shared/management/status"
+	sharedtypes "github.com/netbirdio/netbird/shared/management/types"
 )
 
 const (
@@ -712,11 +713,17 @@ func extractTunnelRuntime(meta *proto.TunnelRuntimeMeta) nbpeer.TunnelRuntimeMet
 		ErrorCode:            meta.GetErrorCode(),
 		EstimatedClockSkewMS: meta.GetEstimatedClockSkewMs(),
 	}
+	runtime.ErrorCode = sharedtypes.NormalizeTunnelRuntimeErrorCode(
+		runtime.ErrorCode,
+	)
+	if runtime.ErrorCode != "" {
+		runtime.Ready = false
+	}
 	if len(runtime.ProtocolVersion) > 32 ||
 		len(runtime.AdapterRevision) > 128 ||
 		len(runtime.ErrorCode) > 64 {
 		return nbpeer.TunnelRuntimeMeta{
-			ErrorCode: "invalid_runtime_metadata",
+			ErrorCode: sharedtypes.TunnelRuntimeErrorMetadataInvalid,
 		}
 	}
 	if runtime.Ready &&
@@ -724,12 +731,12 @@ func extractTunnelRuntime(meta *proto.TunnelRuntimeMeta) nbpeer.TunnelRuntimeMet
 			runtime.ProfileRevision == 0 ||
 			runtime.AdapterRevision == "") {
 		runtime.Ready = false
-		runtime.ErrorCode = "incomplete_runtime_metadata"
+		runtime.ErrorCode = sharedtypes.TunnelRuntimeErrorMetadataIncomplete
 	}
-	if runtime.EstimatedClockSkewMS < -2000 ||
-		runtime.EstimatedClockSkewMS > 2000 {
+	if runtime.EstimatedClockSkewMS < -300000 ||
+		runtime.EstimatedClockSkewMS > 300000 {
 		runtime.Ready = false
-		runtime.ErrorCode = "clock_skew"
+		runtime.ErrorCode = sharedtypes.TunnelRuntimeErrorClockSkew
 	}
 	return runtime
 }

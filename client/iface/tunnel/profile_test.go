@@ -169,3 +169,18 @@ func validParameters() AWG2Parameters {
 		TransportHeader:  "104",
 	}
 }
+
+func TestProfileEqualityIgnoresClockSkewObservation(t *testing.T) {
+	first := &Profile{
+		ProtocolVersion:      ProtocolAmneziaWG2,
+		Revision:             7,
+		EstimatedClockSkewMS: -2001,
+		AWG2:                 validParameters(),
+	}
+	second := *first
+	second.EstimatedClockSkewMS = 3000
+
+	if !first.Equal(&second) {
+		t.Fatal("clock skew observation changed immutable profile identity")
+	}
+}

@@ -45,6 +45,7 @@ import (
 	"github.com/netbirdio/netbird/client/system"
 	mgm "github.com/netbirdio/netbird/shared/management/client"
 	mgmProto "github.com/netbirdio/netbird/shared/management/proto"
+	sharedtypes "github.com/netbirdio/netbird/shared/management/types"
 	"github.com/netbirdio/netbird/shared/relay/auth/hmac"
 	relayClient "github.com/netbirdio/netbird/shared/relay/client"
 	signal "github.com/netbirdio/netbird/shared/signal/client"
@@ -586,6 +587,16 @@ func (c *ConnectClient) SetSyncResponsePersistence(enabled bool) {
 
 // createEngineConfig converts configuration received from Management Service to EngineConfig
 func createEngineConfig(key wgtypes.Key, config *profilemanager.Config, peerConfig *mgmProto.PeerConfig, logPath string) (*EngineConfig, error) {
+	return createEngineConfigAt(key, config, peerConfig, logPath, time.Now())
+}
+
+func createEngineConfigAt(
+	key wgtypes.Key,
+	config *profilemanager.Config,
+	peerConfig *mgmProto.PeerConfig,
+	logPath string,
+	now time.Time,
+) (*EngineConfig, error) {
 	nm := false
 	if config.NetworkMonitor != nil {
 		nm = *config.NetworkMonitor
@@ -602,10 +613,20 @@ func createEngineConfig(key wgtypes.Key, config *profilemanager.Config, peerConf
 	}
 
 	var tunnelProfile *tunnel.Profile
+	var tunnelRuntime *system.TunnelRuntimeInfo
 	if protoProfile := peerConfig.GetTunnelProfile(); protoProfile != nil {
-		tunnelProfile, err = tunnelProfileFromProto(protoProfile)
-		if err != nil {
-			return nil, fmt.Errorf("parse tunnel profile: %w", err)
+		result, profileErr := tunnelProfileFromProtoAt(protoProfile, now)
+		tunnelProfile = result.Profile
+		tunnelRuntime = result.Runtime
+		if result.Warning {
+			log.Warnf(
+				"management clock skew %s exceeds warning threshold %s",
+				time.Duration(result.SkewMS)*time.Millisecond,
+				tunnelProfileClockSkewWarning,
+			)
+		}
+		if profileErr != nil {
+			log.Warnf("rejecting assigned tunnel profile: %v", profileErr)
 		}
 	}
 
@@ -646,6 +667,7 @@ func createEngineConfig(key wgtypes.Key, config *profilemanager.Config, peerConf
 
 		ProfileConfig: config,
 		TunnelProfile: tunnelProfile,
+		TunnelRuntime: tunnelRuntime,
 	}
 
 	if config.PreSharedKey != "" {
@@ -668,31 +690,69 @@ func createEngineConfig(key wgtypes.Key, config *profilemanager.Config, peerConf
 	return engineConf, nil
 }
 
-func tunnelProfileFromProto(profile *mgmProto.TunnelProfile) (*tunnel.Profile, error) {
+const (
+	tunnelProfileClockSkewWarning   = 2 * time.Second
+	tunnelProfileClockSkewHardLimit = 5 * time.Minute
+)
+
+type tunnelProfileDecodeResult struct {
+	Profile  *tunnel.Profile
+	identity *tunnel.Profile
+	Runtime  *system.TunnelRuntimeInfo
+	SkewMS   int64
+	Warning  bool
+}
+
+func tunnelProfileFromProtoAt(
+	profile *mgmProto.TunnelProfile,
+	now time.Time,
+) (tunnelProfileDecodeResult, error) {
+	result := tunnelProfileDecodeResult{}
 	if profile == nil {
-		return nil, errors.New("tunnel profile is missing")
+		return result, errors.New("tunnel profile is missing")
+	}
+	result.Runtime = &system.TunnelRuntimeInfo{
+		ProtocolVersion: profile.GetProtocolVersion(),
+		ProfileRevision: profile.GetRevision(),
+		AdapterRevision: tunnel.AdapterRevision,
+		ErrorCode:       sharedtypes.TunnelRuntimeErrorProfileInvalid,
 	}
 	serverTime := profile.GetServerTime()
 	if serverTime == nil {
-		return nil, errors.New("tunnel profile server time is missing")
+		return result, errors.New("tunnel profile server time is missing")
 	}
 	if err := serverTime.CheckValid(); err != nil {
-		return nil, fmt.Errorf("invalid tunnel profile server time: %w", err)
+		return result, fmt.Errorf("invalid tunnel profile server time: %w", err)
 	}
-	skew := time.Since(serverTime.AsTime())
-	if skew < 0 {
-		skew = -skew
-	}
-	const maxClockSkew = 2 * time.Second
-	if skew > maxClockSkew {
-		return nil, fmt.Errorf("management clock skew %s exceeds %s", skew, maxClockSkew)
-	}
-	return tunnel.DecodeProfileWithHeaderKey(
+	skew := now.Sub(serverTime.AsTime())
+	result.SkewMS = skew.Milliseconds()
+	result.Runtime.EstimatedClockSkewMS = result.SkewMS
+	result.Warning = skew < -tunnelProfileClockSkewWarning ||
+		skew > tunnelProfileClockSkewWarning
+	decoded, err := tunnel.DecodeProfileWithHeaderKey(
 		profile.GetProtocolVersion(),
 		profile.GetRevision(),
 		profile.GetParameters(),
 		profile.GetHeaderProtectionKey(),
 	)
+	if err != nil {
+		return result, err
+	}
+	decoded.EstimatedClockSkewMS = result.SkewMS
+	result.identity = decoded
+	if skew < -tunnelProfileClockSkewHardLimit ||
+		skew > tunnelProfileClockSkewHardLimit {
+		result.Runtime.ErrorCode = sharedtypes.TunnelRuntimeErrorClockSkew
+		return result, fmt.Errorf(
+			"management clock skew %s exceeds %s",
+			skew,
+			tunnelProfileClockSkewHardLimit,
+		)
+	}
+	result.Profile = decoded
+	result.Runtime.Ready = true
+	result.Runtime.ErrorCode = ""
+	return result, nil
 }
 
 func selectMTU(localMTU uint16, peerMTU int32) uint16 {

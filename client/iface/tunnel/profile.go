@@ -95,11 +95,14 @@ type awg3WireParameters struct {
 
 // Profile is the validated userspace tunnel profile assigned by Management.
 type Profile struct {
-	ProtocolVersion     string
-	Revision            uint64
-	AWG2                AWG2Parameters
-	AWG3                AWG3Parameters
-	HeaderProtectionKey [headerProtectionKeySize]byte
+	ProtocolVersion string
+	Revision        uint64
+	// EstimatedClockSkewMS is an operational observation and is not profile
+	// identity. Positive values mean the client clock is ahead of Management.
+	EstimatedClockSkewMS int64
+	AWG2                 AWG2Parameters
+	AWG3                 AWG3Parameters
+	HeaderProtectionKey  [headerProtectionKeySize]byte
 }
 
 // Equal reports whether two profiles describe the same immutable revision.

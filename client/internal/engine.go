@@ -112,6 +112,7 @@ type EngineConfig struct {
 	WgPrivateKey wgtypes.Key
 
 	TunnelProfile *tunnel.Profile
+	TunnelRuntime *system.TunnelRuntimeInfo
 
 	// NetworkMonitor is a flag to enable network monitoring
 	NetworkMonitor bool
@@ -218,6 +219,7 @@ type Engine struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+	now    func() time.Time
 
 	started bool
 
@@ -357,6 +359,7 @@ func NewEngine(
 		clientCancel:             clientCancel,
 		ctx:                      ctx,
 		cancel:                   cancel,
+		now:                      time.Now,
 		signal:                   services.SignalClient,
 		signaler:                 peer.NewSignaler(services.SignalClient, config.WgPrivateKey),
 		mgmClient:                services.MgmClient,
@@ -1299,13 +1302,24 @@ func (e *Engine) applyInfoFlags(info *system.Info) {
 		e.config.EnableSSHRemotePortForwarding,
 		e.config.DisableSSHAuth,
 	)
-	if profile := e.config.TunnelProfile; profile != nil {
-		info.TunnelRuntime = &system.TunnelRuntimeInfo{
-			ProtocolVersion: profile.ProtocolVersion,
-			ProfileRevision: profile.Revision,
-			AdapterRevision: tunnel.AdapterRevision,
-			Ready:           true,
-		}
+	if runtime := e.config.TunnelRuntime; runtime != nil {
+		copy := *runtime
+		info.TunnelRuntime = &copy
+	} else if profile := e.config.TunnelProfile; profile != nil {
+		info.TunnelRuntime = tunnelRuntimeForProfile(profile)
+	}
+}
+
+func tunnelRuntimeForProfile(profile *tunnel.Profile) *system.TunnelRuntimeInfo {
+	if profile == nil {
+		return nil
+	}
+	return &system.TunnelRuntimeInfo{
+		ProtocolVersion:      profile.ProtocolVersion,
+		ProfileRevision:      profile.Revision,
+		AdapterRevision:      tunnel.AdapterRevision,
+		Ready:                true,
+		EstimatedClockSkewMS: profile.EstimatedClockSkewMS,
 	}
 }
 
@@ -1366,16 +1380,57 @@ func (e *Engine) updateConfig(conf *mgmProto.PeerConfig) error {
 }
 
 func (e *Engine) updateTunnelProfile(protoProfile *mgmProto.TunnelProfile) error {
-	var next *tunnel.Profile
-	if protoProfile != nil {
-		var err error
-		next, err = tunnelProfileFromProto(protoProfile)
-		if err != nil {
-			return fmt.Errorf("parse updated tunnel profile: %w", err)
-		}
-	}
+	return e.updateTunnelProfileAt(protoProfile, e.currentTime())
+}
+
+func (e *Engine) updateTunnelProfileAt(
+	protoProfile *mgmProto.TunnelProfile,
+	now time.Time,
+) error {
 	current := e.config.TunnelProfile
+	var next *tunnel.Profile
+	var nextRuntime *system.TunnelRuntimeInfo
+	if protoProfile != nil {
+		if err := validateTunnelProfileRevision(current, protoProfile); err != nil {
+			return err
+		}
+		result, err := tunnelProfileFromProtoAt(protoProfile, now)
+		next = result.Profile
+		nextRuntime = result.Runtime
+		if err != nil {
+			if current != nil && protoProfile.GetRevision() == current.Revision {
+				if result.Runtime.ErrorCode != types.TunnelRuntimeErrorClockSkew ||
+					!current.Equal(result.identity) {
+					return tunnelProfileRevisionError(
+						protoProfile.GetRevision(),
+						current.Revision,
+					)
+				}
+			}
+			e.publishTunnelRuntime(result.Runtime)
+			return nil
+		}
+		if current != nil && !current.Equal(next) &&
+			next.Revision <= current.Revision {
+			return tunnelProfileRevisionError(
+				next.Revision,
+				current.Revision,
+			)
+		}
+		e.warnTunnelClockSkew(result)
+	}
 	if current.Equal(next) {
+		if current != nil {
+			recovered := tunnelRuntimeRecovered(
+				e.config.TunnelRuntime,
+				nextRuntime,
+			)
+			current.EstimatedClockSkewMS = next.EstimatedClockSkewMS
+			e.config.TunnelRuntime = nextRuntime
+			if recovered {
+				e.syncTunnelRuntimeMeta()
+			}
+		}
 		return nil
 	}
 	if current == nil || next == nil {
@@ -1383,16 +1438,86 @@ func (e *Engine) updateTunnelProfile(protoProfile *mgmProto.TunnelProfile) error
 		e.clientCancel()
 		return ErrResetConnection
 	}
-	if next.Revision <= current.Revision {
-		return fmt.Errorf(
-			"tunnel profile revision %d does not advance beyond %d",
-			next.Revision,
-			current.Revision,
-		)
-	}
 	_ = CtxGetState(e.ctx).Wrap(ErrResetConnection)
 	e.clientCancel()
 	return ErrResetConnection
+}
+
+func validateTunnelProfileRevision(
+	current *tunnel.Profile,
+	assigned *mgmProto.TunnelProfile,
+) error {
+	if current == nil {
+		return nil
+	}
+	revision := assigned.GetRevision()
+	if revision < current.Revision ||
+		(revision == current.Revision &&
+			assigned.GetProtocolVersion() != current.ProtocolVersion) {
+		return tunnelProfileRevisionError(revision, current.Revision)
+	}
+	return nil
+}
+
+func tunnelProfileRevisionError(assigned, current uint64) error {
+	return fmt.Errorf(
+		"tunnel profile revision %d does not advance beyond %d",
+		assigned,
+		current,
+	)
+}
+
+func tunnelRuntimeRecovered(current, next *system.TunnelRuntimeInfo) bool {
+	return current != nil && next != nil &&
+		current.ProfileRevision == next.ProfileRevision &&
+		(!current.Ready || current.ErrorCode != "") && next.Ready
+}
+
+func (e *Engine) publishTunnelRuntime(next *system.TunnelRuntimeInfo) {
+	current := e.config.TunnelRuntime
+	if current != nil && next != nil && *current == *next {
+		return
+	}
+	e.config.TunnelRuntime = next
+	e.syncTunnelRuntimeMeta()
+}
+
+func (e *Engine) warnTunnelClockSkew(result tunnelProfileDecodeResult) {
+	if !result.Warning {
+		return
+	}
+	previous := e.config.TunnelRuntime
+	warningMS := tunnelProfileClockSkewWarning.Milliseconds()
+	if previous != nil &&
+		previous.ProfileRevision == result.Runtime.ProfileRevision &&
+		(previous.EstimatedClockSkewMS < -warningMS ||
+			previous.EstimatedClockSkewMS > warningMS) {
+		return
+	}
+	log.Warnf(
+		"management clock skew %s exceeds warning threshold %s",
+		time.Duration(result.SkewMS)*time.Millisecond,
+		tunnelProfileClockSkewWarning,
+	)
+}
+
+func (e *Engine) syncTunnelRuntimeMeta() {
+	if e.mgmClient == nil {
+		return
+	}
+	info, ok := system.GetInfoWithChecksTimeout(
+		e.ctx,
+		systemInfoTimeout,
+		e.checks,
+		e.overlayAddresses()...,
+	)
+	if !ok {
+		return
+	}
+	e.applyInfoFlags(info)
+	if err := e.mgmClient.SyncMeta(info); err != nil {
+		log.Warnf("sync rejected tunnel runtime metadata: %v", err)
+	}
 }
 
 // hasIPv6Changed reports whether the IPv6 overlay address in the peer config
@@ -1682,6 +1807,12 @@ func (e *Engine) reconcilePeers(networkMap *mgmProto.NetworkMap) ([]*mgmProto.Re
 		}
 		if p.GetTunnelMode() == mgmProto.TunnelMode_TunnelModeBlocked {
 			log.Debugf("management blocked tunnel to peer %s", p.GetWgPubKey())
+			continue
+		}
+		if !e.tunnelRuntimeReady() &&
+			(p.GetTunnelMode() == mgmProto.TunnelMode_TunnelModeAmneziaWG ||
+				p.GetTunnelMode() == mgmProto.TunnelMode_TunnelModeAmneziaWG3) {
+			log.Debugf("local tunnel runtime blocked AWG peer %s", p.GetWgPubKey())
 			continue
 		}
 		remotePeers = append(remotePeers, p)
@@ -1981,7 +2112,7 @@ func (e *Engine) addNewPeer(peerConfig *mgmProto.RemotePeerConfig) error {
 func (e *Engine) peerTunnelState(
 	peerConfig *mgmProto.RemotePeerConfig,
 ) (peerTunnelState, error) {
-	target, future, err := e.targetPeerTunnelState(peerConfig, time.Now())
+	target, future, err := e.targetPeerTunnelState(peerConfig, e.currentTime())
 	if err != nil {
 		return peerTunnelState{}, err
 	}
@@ -2048,7 +2179,14 @@ func (e *Engine) targetPeerTunnelState(
 				)
 			}
 		}
-		return transitionState(tunnel.ModeStandard, "", 0, peerConfig, now)
+		return transitionState(
+			tunnel.ModeStandard,
+			"",
+			0,
+			peerConfig,
+			now,
+			e.tunnelClockSkew(),
+		)
 
 	case mgmProto.TunnelMode_TunnelModeAmneziaWG,
 		mgmProto.TunnelMode_TunnelModeAmneziaWG3:
@@ -2092,6 +2230,7 @@ func (e *Engine) targetPeerTunnelState(
 			profile.Revision,
 			peerConfig,
 			now,
+			e.tunnelClockSkew(),
 		)
 
 	default:
@@ -2108,6 +2247,7 @@ func transitionState(
 	profileRevision uint64,
 	peerConfig *mgmProto.RemotePeerConfig,
 	now time.Time,
+	clockSkew time.Duration,
 ) (peerTunnelState, bool, error) {
 	transitionID := peerConfig.GetTunnelTransitionId()
 	effectiveAt := peerConfig.GetTunnelEffectiveAt()
@@ -2129,7 +2269,7 @@ func transitionState(
 		return peerTunnelState{}, false, fmt.Errorf("invalid tunnel effective time: %w", err)
 	}
 
-	effectiveTime := effectiveAt.AsTime()
+	effectiveTime := effectiveAt.AsTime().Add(clockSkew)
 	state := peerTunnelState{
 		mode:            mode,
 		protocolVersion: protocolVersion,
@@ -2138,6 +2278,19 @@ func transitionState(
 		effectiveAt:     effectiveTime.UnixNano(),
 	}
 	return state, effectiveTime.After(now), nil
+}
+
+func (e *Engine) tunnelRuntimeReady() bool {
+	return e.config.TunnelRuntime == nil || e.config.TunnelRuntime.Ready
+}
+
+func (e *Engine) tunnelClockSkew() time.Duration {
+	if e.config.TunnelRuntime == nil {
+		return 0
+	}
+	return time.Duration(
+		e.config.TunnelRuntime.EstimatedClockSkewMS,
+	) * time.Millisecond
 }
 
 func tunnelModeForProtocol(protocolVersion string) (tunnel.Mode, error) {
@@ -2158,7 +2311,7 @@ func (e *Engine) syncPeerTunnelTransitions(
 	peers []*mgmProto.RemotePeerConfig,
 ) error {
 	scheduled := make(map[string]struct{}, len(peers))
-	now := time.Now()
+	now := e.currentTime()
 	for _, peerConfig := range peers {
 		target, future, err := e.targetPeerTunnelState(peerConfig, now)
 		if err != nil {
@@ -2173,7 +2326,7 @@ func (e *Engine) syncPeerTunnelTransitions(
 			continue
 		}
 		scheduled[peerConfig.GetWgPubKey()] = struct{}{}
-		e.schedulePeerTunnelTransition(peerConfig, target)
+		e.schedulePeerTunnelTransition(peerConfig, target, now)
 	}
 
 	for peerKey := range e.pendingTunnelTransitions {
@@ -2187,6 +2340,7 @@ func (e *Engine) syncPeerTunnelTransitions(
 func (e *Engine) schedulePeerTunnelTransition(
 	peerConfig *mgmProto.RemotePeerConfig,
 	target peerTunnelState,
+	now time.Time,
 ) {
 	peerKey := peerConfig.GetWgPubKey()
 	if pending, ok := e.pendingTunnelTransitions[peerKey]; ok {
@@ -2206,7 +2360,7 @@ func (e *Engine) schedulePeerTunnelTransition(
 		cancel:          cancel,
 	}
 	config := pbproto.Clone(peerConfig).(*mgmProto.RemotePeerConfig)
-	wait := time.Until(time.Unix(0, target.effectiveAt))
+	wait := time.Unix(0, target.effectiveAt).Sub(now)
 
 	e.shutdownWg.Add(1)
 	go func() {
@@ -2240,6 +2394,13 @@ func (e *Engine) schedulePeerTunnelTransition(
 			e.failTunnelTransition(peerKey, target.transitionID, err)
 		}
 	}()
+}
+
+func (e *Engine) currentTime() time.Time {
+	if e.now != nil {
+		return e.now()
+	}
+	return time.Now()
 }
 
 func (e *Engine) cancelPeerTunnelTransition(peerKey string) {
