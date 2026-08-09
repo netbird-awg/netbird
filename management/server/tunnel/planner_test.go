@@ -403,6 +403,47 @@ func plannerSettings(updatedAt time.Time) *types.Settings {
 	}
 }
 
+func TestAdapterSupportsProtocolRequiresHardenedAWG3Revision(t *testing.T) {
+	const previousAWG3Revision = "6800afdcafeab8ed59e850c4f6adabd9635831d6"
+
+	tests := []struct {
+		name            string
+		adapterRevision string
+		protocolVersion string
+		want            bool
+	}{
+		{
+			name:            "hardened AWG3 adapter",
+			adapterRevision: HybridAWG3AdapterRevision,
+			protocolVersion: clienttunnel.ProtocolAmneziaWG3,
+			want:            true,
+		},
+		{
+			name:            "pre-hardening AWG3 adapter",
+			adapterRevision: previousAWG3Revision,
+			protocolVersion: clienttunnel.ProtocolAmneziaWG3,
+			want:            false,
+		},
+		{
+			name:            "hardened adapter with AWG2 profile",
+			adapterRevision: HybridAWG3AdapterRevision,
+			protocolVersion: clienttunnel.ProtocolAmneziaWG2,
+			want:            true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := adapterSupportsProtocol(
+				test.adapterRevision,
+				test.protocolVersion,
+			); got != test.want {
+				t.Fatalf("adapter support = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func plannerPeer(id string, readyAt time.Time) *sharedtypes.ComponentPeer {
 	return &sharedtypes.ComponentPeer{
 		ID:                 id,

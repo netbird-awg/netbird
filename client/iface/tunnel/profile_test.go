@@ -3,9 +3,44 @@ package tunnel
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestAdapterRevisionMatchesWireGuardReplacement(t *testing.T) {
+	_, testFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate profile test source")
+	}
+	goMod, err := os.ReadFile(filepath.Join(filepath.Dir(testFile), "../../..", "go.mod"))
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+
+	const replacement = "replace golang.zx2c4.com/wireguard => "
+	for line := range strings.SplitSeq(string(goMod), "\n") {
+		if !strings.HasPrefix(line, replacement) {
+			continue
+		}
+		separator := strings.LastIndexByte(line, '-')
+		if separator < 0 || separator == len(line)-1 {
+			t.Fatalf("wireguard replacement has no revision: %q", line)
+		}
+		pinnedRevision := line[separator+1:]
+		if !strings.HasPrefix(AdapterRevision, pinnedRevision) {
+			t.Fatalf(
+				"adapter revision %q does not identify pinned wireguard %q",
+				AdapterRevision,
+				pinnedRevision,
+			)
+		}
+		return
+	}
+	t.Fatal("wireguard replacement is missing from go.mod")
+}
 
 func TestDecodeProfile(t *testing.T) {
 	parameters := validParameters()
