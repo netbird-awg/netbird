@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Netibird-AWG
+Name=NetBird-AWG
 Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 netibird-awg-ui
 Icon=netbird
 Categories=Development;

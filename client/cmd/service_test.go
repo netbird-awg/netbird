@@ -139,5 +139,5 @@ func TestServiceConfigUsesNetibirdAWGBrand(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "netibird-awg", cfg.Name, "Service name should match the process")
-	assert.Equal(t, "Netibird-AWG", cfg.DisplayName, "Service display name should match")
+	assert.Equal(t, "NetBird-AWG", cfg.DisplayName, "Service display name should match")
 }

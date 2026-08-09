@@ -49,11 +49,11 @@ nfpms:
   # distro points at exactly one of them. The file names must still differ:
   # the Debian pool is shared storage keyed by file name, so a default-named
   # gtk3 .deb would overwrite the stable one.
-  - maintainer: Netibird-AWG <dev@netbird.io>
-    description: Netibird-AWG client UI.
+  - maintainer: NetBird-AWG <dev@netbird.io>
+    description: NetBird-AWG client UI.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: Netibird-AWG
+    vendor: NetBird-AWG
     id: netibird_awg_ui_deb_gtk3
     package_name: netibird-awg-ui
     file_name_template: "{{ .PackageName }}-gtk3_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -73,11 +73,11 @@ nfpms:
       - libgtk-3-0
       - libwebkit2gtk-4.1-0
 
-  - maintainer: Netibird-AWG <dev@netbird.io>
-    description: Netibird-AWG client UI.
+  - maintainer: NetBird-AWG <dev@netbird.io>
+    description: NetBird-AWG client UI.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: Netibird-AWG
+    vendor: NetBird-AWG
     id: netibird_awg_ui_rpm_gtk3
     package_name: netibird-awg-ui
     file_name_template: "{{ .PackageName }}-gtk3_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

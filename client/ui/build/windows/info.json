@@ -6,9 +6,9 @@
 		"0000": {
 			"ProductVersion": "0.0.1",
 			"CompanyName": "NetBird",
-			"FileDescription": "Netibird-AWG desktop client",
+			"FileDescription": "NetBird-AWG desktop client",
 			"LegalCopyright": "NetBird GmbH",
-			"ProductName": "Netibird-AWG",
+			"ProductName": "NetBird-AWG",
 			"Comments": "This is a comment"
 		}
 	}

@@ -129,7 +129,7 @@ func createServiceConfigForInstall() (*service.Config, error) {
 
 var installCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install Netibird-AWG service",
+	Short: "Install NetBird-AWG service",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := setupServiceCommand(cmd); err != nil {
 			return err
@@ -160,14 +160,14 @@ var installCmd = &cobra.Command{
 			cmd.PrintErrf("Warning: failed to save service params: %v\n", err)
 		}
 
-		cmd.Println("Netibird-AWG service has been installed")
+		cmd.Println("NetBird-AWG service has been installed")
 		return nil
 	},
 }
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
-	Short: "uninstalls Netibird-AWG service from system",
+	Short: "uninstalls NetBird-AWG service from system",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := setupServiceCommand(cmd); err != nil {
 			return err
@@ -196,15 +196,15 @@ var uninstallCmd = &cobra.Command{
 			}
 		}
 
-		cmd.Println("Netibird-AWG service has been uninstalled")
+		cmd.Println("NetBird-AWG service has been uninstalled")
 		return nil
 	},
 }
 
 var reconfigureCmd = &cobra.Command{
 	Use:   "reconfigure",
-	Short: "reconfigures Netibird-AWG service with new settings",
-	Long: `Reconfigures the Netibird-AWG service with new settings without manual uninstall/install.
+	Short: "reconfigures NetBird-AWG service with new settings",
+	Long: `Reconfigures the NetBird-AWG service with new settings without manual uninstall/install.
 This command will temporarily stop the service, update its configuration, and restart it if it was running.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := setupServiceCommand(cmd); err != nil {
@@ -234,7 +234,7 @@ This command will temporarily stop the service, update its configuration, and re
 		}
 
 		if wasRunning {
-			cmd.Println("Stopping Netibird-AWG service...")
+			cmd.Println("Stopping NetBird-AWG service...")
 			if err := s.Stop(); err != nil {
 				cmd.Printf("Warning: failed to stop service: %v\n", err)
 			}
@@ -255,13 +255,13 @@ This command will temporarily stop the service, update its configuration, and re
 		}
 
 		if wasRunning {
-			cmd.Println("Starting Netibird-AWG service...")
+			cmd.Println("Starting NetBird-AWG service...")
 			if err := s.Start(); err != nil {
 				return fmt.Errorf("start service after reconfigure: %w", err)
 			}
-			cmd.Println("Netibird-AWG service has been reconfigured and started")
+			cmd.Println("NetBird-AWG service has been reconfigured and started")
 		} else {
-			cmd.Println("Netibird-AWG service has been reconfigured")
+			cmd.Println("NetBird-AWG service has been reconfigured")
 		}
 
 		return nil

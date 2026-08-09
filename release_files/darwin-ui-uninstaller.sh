@@ -8,6 +8,6 @@ if [ -z "$NB_BIN" ]
 then
   exit 0
 fi
-echo "Netibird-AWG daemon service is still running. You can uninstall it with:"
+echo "NetBird-AWG daemon service is still running. You can uninstall it with:"
 echo "sudo netibird-awg service stop"
 echo "sudo netibird-awg service uninstall"

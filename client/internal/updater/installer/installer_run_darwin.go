@@ -18,7 +18,7 @@ import (
 const (
 	daemonName    = "netibird-awg"
 	updaterBinary = "netibird-awg-updater"
-	uiBinary      = "/Applications/Netibird-AWG.app"
+	uiBinary      = "/Applications/NetBird-AWG.app"
 
 	defaultTempDir = "/var/lib/netbird/tmp-install"
 
@@ -82,21 +82,21 @@ func (u *Installer) Setup(ctx context.Context, dryRun bool, installerFile string
 }
 
 func (u *Installer) startDaemon(daemonFolder string) error {
-	log.Infof("starting Netibird-AWG service")
+	log.Infof("starting NetBird-AWG service")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, filepath.Join(daemonFolder, daemonName), "service", "start")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Warnf("failed to start Netibird-AWG service: %v, output: %s", err, string(output))
+		log.Warnf("failed to start NetBird-AWG service: %v, output: %s", err, string(output))
 		return err
 	}
-	log.Infof("Netibird-AWG service started successfully")
+	log.Infof("NetBird-AWG service started successfully")
 	return nil
 }
 
 func (u *Installer) startUIAsUser() error {
-	log.Infof("starting Netibird-AWG UI: %s", uiBinary)
+	log.Infof("starting NetBird-AWG UI: %s", uiBinary)
 
 	username, err := consoleUser()
 	if err != nil {
@@ -117,7 +117,7 @@ func (u *Installer) startUIAsUser() error {
 		return fmt.Errorf("run UI launch: %w", err)
 	}
 
-	log.Infof("Netibird-AWG UI started successfully for user %s", username)
+	log.Infof("NetBird-AWG UI started successfully for user %s", username)
 	return nil
 }
 
@@ -221,7 +221,7 @@ func (u *Installer) updateHomeBrew(ctx context.Context) error {
 }
 
 func (u *Installer) killUI() {
-	log.Infof("killing existing Netibird-AWG UI process")
+	log.Infof("killing existing NetBird-AWG UI process")
 	cmd := exec.Command("pkill", "-x", "netibird-awg-ui")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		// pkill returns exit code 1 if no processes matched, which is fine
