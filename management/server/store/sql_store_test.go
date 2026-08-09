@@ -345,7 +345,27 @@ func Test_AccountSettings_SaveAndRetrieve(t *testing.T) {
 		settings := types.Settings{}
 		numOfExportedFields, err := populateFields.PopulateAll(reflect.ValueOf(&settings).Elem())
 		assert.NoError(t, err)
-		assert.Equal(t, 30, numOfExportedFields)
+		assert.Equal(t, 33, numOfExportedFields)
+		settings.TunnelPolicyUpdatedAt = time.Date(
+			2026,
+			time.August,
+			9,
+			11,
+			59,
+			59,
+			122000000,
+			time.UTC,
+		)
+		settings.TunnelProfileGraceUntil = time.Date(
+			2026,
+			time.August,
+			9,
+			12,
+			0,
+			0,
+			123000000,
+			time.UTC,
+		)
 		account.Settings = &settings
 
 		err = store.SaveAccount(context.Background(), account)
@@ -355,8 +375,50 @@ func Test_AccountSettings_SaveAndRetrieve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, accountFromDb)
 		assert.NotNil(t, accountFromDb.Settings)
+		assert.True(
+			t,
+			settings.TunnelPolicyUpdatedAt.Equal(
+				accountFromDb.Settings.TunnelPolicyUpdatedAt,
+			),
+			"tunnel policy timestamp should preserve its instant",
+		)
+		settings.TunnelPolicyUpdatedAt = accountFromDb.Settings.TunnelPolicyUpdatedAt
+		assert.True(
+			t,
+			settings.TunnelProfileGraceUntil.Equal(
+				accountFromDb.Settings.TunnelProfileGraceUntil,
+			),
+			"tunnel profile grace deadline should preserve its instant",
+		)
+		settings.TunnelProfileGraceUntil =
+			accountFromDb.Settings.TunnelProfileGraceUntil
+		expectedProfiles := []*types.TunnelProfile{
+			settings.TunnelProfile,
+			settings.TunnelProfilePending,
+			settings.TunnelProfilePrevious,
+		}
+		storedProfiles := []*types.TunnelProfile{
+			accountFromDb.Settings.TunnelProfile,
+			accountFromDb.Settings.TunnelProfilePending,
+			accountFromDb.Settings.TunnelProfilePrevious,
+		}
+		for i, expectedProfile := range expectedProfiles {
+			require.NotNil(t, expectedProfile)
+			require.NotNil(t, storedProfiles[i])
+			assert.True(
+				t,
+				expectedProfile.UpdatedAt.Equal(storedProfiles[i].UpdatedAt),
+				"tunnel profile timestamp should preserve its instant",
+			)
+			expectedProfile.UpdatedAt = storedProfiles[i].UpdatedAt
+		}
 
-		assert.True(t, reflect.DeepEqual(&settings, accountFromDb.Settings), "created settings and settings retrieved from the db should match")
+		assert.Equal(
+			t,
+			&settings,
+			accountFromDb.Settings,
+			"created settings and settings retrieved from the db should match",
+		)
 	})
 }
 
@@ -587,7 +649,7 @@ func TestSqlStore_SavePeer(t *testing.T) {
 
 		numOfFields, err := populateFields.PopulateAll(reflectedMetadata)
 		assert.NoError(t, err)
-		assert.Equal(t, 32, numOfFields)
+		assert.Equal(t, 43, numOfFields)
 
 		// save status of non-existing peer
 		peer := &nbpeer.Peer{

@@ -65,6 +65,7 @@ const (
 	accountAndIDsQueryCondition    = "account_id = ? AND id IN ?"
 	accountIDCondition             = "account_id = ?"
 	peerNotFoundFMT                = "peer %s not found"
+	tunnelProfileGraceUntilColumn  = "settings_tunnel_profile_grace_until"
 
 	pgMaxConnections    = 30
 	pgMinConnections    = 1
@@ -330,10 +331,13 @@ func (s *SqlStore) SaveAccount(ctx context.Context, account *types.Account) erro
 			return result.Error
 		}
 
-		result = tx.
+		createAccount := tx.
 			Session(&gorm.Session{FullSaveAssociations: true}).
-			Clauses(clause.OnConflict{UpdateAll: true}).
-			Create(account)
+			Clauses(clause.OnConflict{UpdateAll: true})
+		if storedSettings != nil && storedSettings.TunnelProfileGraceUntil.IsZero() {
+			createAccount = createAccount.Omit(tunnelProfileGraceUntilColumn)
+		}
+		result = createAccount.Create(account)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -380,7 +384,7 @@ func settingsForStorage(
 	enc *crypt.FieldEncrypt,
 ) (*types.Settings, error) {
 	if settings == nil {
-		return nil, errors.New("account settings are nil")
+		return nil, nil //nolint:nilnil // SaveAccount accepts legacy accounts without settings.
 	}
 	settingsCopy := settings.Copy()
 	profiles := []*types.TunnelProfile{
@@ -1376,6 +1380,7 @@ func (s *SqlStore) getAccountGorm(ctx context.Context, accountID string) (*types
 		if err := user.DecryptSensitiveData(s.fieldEncrypt); err != nil {
 			return nil, fmt.Errorf("decrypt user: %w", err)
 		}
+		user.MFAPolicy = user.MFAPolicy.Normalized()
 		account.Users[user.Id] = &user
 		user.PATsG = nil
 	}
@@ -2223,7 +2228,8 @@ func (s *SqlStore) getPeers(ctx context.Context, accountID string) ([]nbpeer.Pee
 func (s *SqlStore) getUsers(ctx context.Context, accountID string) ([]types.User, error) {
 	const query = `SELECT id, account_id, role, is_service_user, non_deletable, service_user_name, auto_groups,
 	blocked, pending_approval, last_login, created_at, issued, integration_ref_id, integration_ref_integration_type,
-	email, name, tunnel_policy, tunnel_policy_updated_at FROM users WHERE account_id = $1`
+	email, name, tunnel_policy, tunnel_policy_updated_at, mfa_policy, mfa_policy_updated_at,
+	mfa_failed_attempts, mfa_locked_until FROM users WHERE account_id = $1`
 	rows, err := s.pool.Query(ctx, query, accountID)
 	if err != nil {
 		return nil, err
@@ -2232,8 +2238,10 @@ func (s *SqlStore) getUsers(ctx context.Context, accountID string) ([]types.User
 		var u types.User
 		var autoGroups []byte
 		var lastLogin, createdAt, tunnelPolicyUpdatedAt sql.NullTime
+		var mfaPolicyUpdatedAt, mfaLockedUntil sql.NullTime
 		var isServiceUser, nonDeletable, blocked, pendingApproval sql.NullBool
-		var tunnelPolicy sql.NullString
+		var tunnelPolicy, mfaPolicy sql.NullString
+		var mfaFailedAttempts sql.NullInt64
 		err := row.Scan(
 			&u.Id,
 			&u.AccountID,
@@ -2253,6 +2261,10 @@ func (s *SqlStore) getUsers(ctx context.Context, accountID string) ([]types.User
 			&u.Name,
 			&tunnelPolicy,
 			&tunnelPolicyUpdatedAt,
+			&mfaPolicy,
+			&mfaPolicyUpdatedAt,
+			&mfaFailedAttempts,
+			&mfaLockedUntil,
 		)
 		if err == nil {
 			if lastLogin.Valid {
@@ -2278,6 +2290,19 @@ func (s *SqlStore) getUsers(ctx context.Context, accountID string) ([]types.User
 			}
 			if tunnelPolicyUpdatedAt.Valid {
 				u.TunnelPolicyUpdatedAt = tunnelPolicyUpdatedAt.Time
+			}
+			if mfaPolicy.Valid {
+				u.MFAPolicy = types.MFAPolicy(mfaPolicy.String)
+			}
+			u.MFAPolicy = u.MFAPolicy.Normalized()
+			if mfaPolicyUpdatedAt.Valid {
+				u.MFAPolicyUpdatedAt = &mfaPolicyUpdatedAt.Time
+			}
+			if mfaFailedAttempts.Valid {
+				u.MFAFailedAttempts = int(mfaFailedAttempts.Int64)
+			}
+			if mfaLockedUntil.Valid {
+				u.MFALockedUntil = &mfaLockedUntil.Time
 			}
 			if autoGroups != nil {
 				_ = json.Unmarshal(autoGroups, &u.AutoGroups)
@@ -4588,6 +4613,9 @@ func (s *SqlStore) SaveDNSSettings(ctx context.Context, accountID string, settin
 
 // SaveAccountSettings stores the account settings in DB.
 func (s *SqlStore) SaveAccountSettings(ctx context.Context, accountID string, settings *types.Settings) error {
+	if settings == nil {
+		return status.Errorf(status.InvalidArgument, "account settings are nil")
+	}
 	settingsCopy, err := settingsForStorage(settings, s.fieldEncrypt)
 	if err != nil {
 		return status.Errorf(status.Internal, "failed to encrypt account settings")
@@ -4596,11 +4624,26 @@ func (s *SqlStore) SaveAccountSettings(ctx context.Context, accountID string, se
 		&settingsCopy.TunnelPolicyUpdatedAt,
 		time.Time{},
 	)
-	result := s.db.Model(&types.Account{}).
-		Select("*").Where(idQueryCondition, accountID).
-		Updates(&types.AccountSettings{Settings: settingsCopy})
-	if result.Error != nil {
-		log.WithContext(ctx).Errorf("failed to save account settings to store: %v", result.Error)
+	var graceUntil any
+	if !settingsCopy.TunnelProfileGraceUntil.IsZero() {
+		graceUntil = settingsCopy.TunnelProfileGraceUntil
+	}
+	err = s.transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&types.Account{}).
+			Select("*").
+			Omit(tunnelProfileGraceUntilColumn).
+			Where(idQueryCondition, accountID).
+			Updates(&types.AccountSettings{Settings: settingsCopy})
+		if result.Error != nil {
+			return result.Error
+		}
+
+		return tx.Model(&types.Account{}).
+			Where(idQueryCondition, accountID).
+			UpdateColumn(tunnelProfileGraceUntilColumn, graceUntil).Error
+	})
+	if err != nil {
+		log.WithContext(ctx).Errorf("failed to save account settings to store: %v", err)
 		return status.Errorf(status.Internal, "failed to save account settings to store")
 	}
 

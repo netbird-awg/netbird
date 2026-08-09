@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/netip"
 	"testing"
@@ -249,4 +250,138 @@ func TestAWG3SettingsRequireDatastoreEncryption(t *testing.T) {
 	}
 
 	require.Error(t, sqlStore.SaveAccount(ctx, account))
+}
+
+func TestSaveAccountAllowsNilSettings(t *testing.T) {
+	ctx := context.Background()
+	sqlStore, cleanup, err := NewTestStoreFromSQL(ctx, "", t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	account := newAccountWithId(ctx, "nil-settings", "nil-settings-user", "")
+	account.Settings = nil
+
+	require.NoError(t, sqlStore.SaveAccount(ctx, account))
+}
+
+func TestSaveAccountSettingsRejectsNilSettings(t *testing.T) {
+	ctx := context.Background()
+	sqlStore, cleanup, err := NewTestStoreFromSQL(ctx, "", t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	require.Error(t, sqlStore.SaveAccountSettings(ctx, "account", nil))
+}
+
+func TestSaveAccountStoresZeroGraceUntilAsNull(t *testing.T) {
+	runTestForAllEngines(t, "", func(t *testing.T, store Store) {
+		ctx := context.Background()
+		account := newAccountWithId(ctx, "zero-grace", "zero-grace-user", "")
+
+		require.NoError(t, store.SaveAccount(ctx, account))
+		requireGraceUntilNull(t, store, account.Id)
+
+		stored, err := store.GetAccount(ctx, account.Id)
+		require.NoError(t, err)
+		require.True(t, stored.Settings.TunnelProfileGraceUntil.IsZero())
+	})
+}
+
+func TestTunnelProfileGraceUntilRoundTrips(t *testing.T) {
+	runTestForAllEngines(t, "", func(t *testing.T, store Store) {
+		ctx := context.Background()
+		graceUntil := time.Date(2026, time.August, 9, 12, 0, 0, 123000000, time.UTC)
+		account := newAccountWithId(ctx, "grace-roundtrip", "grace-user", "")
+		account.Settings.TunnelProfileGraceUntil = graceUntil
+
+		require.NoError(t, store.SaveAccount(ctx, account))
+
+		stored, err := store.GetAccount(ctx, account.Id)
+		require.NoError(t, err)
+		require.True(t, graceUntil.Equal(stored.Settings.TunnelProfileGraceUntil))
+
+		settings, err := store.GetAccountSettings(ctx, LockingStrengthNone, account.Id)
+		require.NoError(t, err)
+		require.True(t, graceUntil.Equal(settings.TunnelProfileGraceUntil))
+	})
+}
+
+func TestSaveAccountSettingsClearsGraceUntil(t *testing.T) {
+	runTestForAllEngines(t, "", func(t *testing.T, store Store) {
+		ctx := context.Background()
+		account := newAccountWithId(ctx, "clear-grace", "clear-grace-user", "")
+		account.Settings.TunnelProfileGraceUntil = time.Date(
+			2026,
+			time.August,
+			9,
+			12,
+			0,
+			0,
+			0,
+			time.UTC,
+		)
+		require.NoError(t, store.SaveAccount(ctx, account))
+
+		settings, err := store.GetAccountSettings(ctx, LockingStrengthNone, account.Id)
+		require.NoError(t, err)
+		settings.TunnelProfileGraceUntil = time.Time{}
+		require.NoError(t, store.SaveAccountSettings(ctx, account.Id, settings))
+
+		requireGraceUntilNull(t, store, account.Id)
+
+		stored, err := store.GetAccount(ctx, account.Id)
+		require.NoError(t, err)
+		require.True(t, stored.Settings.TunnelProfileGraceUntil.IsZero())
+	})
+}
+
+func TestSaveAccountSettingsRollsBackWhenGraceUpdateFails(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv("NETBIRD_STORE_ENGINE", string(types.SqliteStoreEngine))
+	store, cleanup, err := NewTestStoreFromSQL(ctx, "", t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	sqlStore, ok := store.(*SqlStore)
+	require.True(t, ok)
+
+	account := newAccountWithId(ctx, "atomic-grace", "atomic-grace-user", "")
+	account.Settings.TunnelProfileGraceUntil = time.Now().UTC().Add(time.Hour)
+	require.NoError(t, store.SaveAccount(ctx, account))
+	settings, err := store.GetAccountSettings(ctx, LockingStrengthNone, account.Id)
+	require.NoError(t, err)
+
+	require.NoError(
+		t,
+		sqlStore.db.Exec(
+			"CREATE TRIGGER fail_grace_clear "+
+				"BEFORE UPDATE OF "+tunnelProfileGraceUntilColumn+" ON accounts "+
+				"WHEN NEW."+tunnelProfileGraceUntilColumn+" IS NULL "+
+				"BEGIN SELECT RAISE(FAIL, 'injected grace update failure'); END",
+		).Error,
+	)
+
+	settings.TunnelPolicy = types.TunnelAccountPolicyPreferAWG
+	settings.TunnelProfileGraceUntil = time.Time{}
+	updateErr := store.SaveAccountSettings(ctx, account.Id, settings)
+	require.Error(t, updateErr)
+
+	stored, err := store.GetAccountSettings(ctx, LockingStrengthNone, account.Id)
+	require.NoError(t, err)
+	require.Equal(t, types.TunnelAccountPolicyStandard, stored.TunnelPolicy)
+}
+
+func requireGraceUntilNull(t *testing.T, store Store, accountID string) {
+	t.Helper()
+	sqlStore, ok := store.(*SqlStore)
+	require.True(t, ok)
+
+	var graceUntil sql.NullTime
+	require.NoError(
+		t,
+		sqlStore.db.Model(&types.Account{}).
+			Select("settings_tunnel_profile_grace_until").
+			Where(idQueryCondition, accountID).
+			Scan(&graceUntil).Error,
+	)
+	require.False(t, graceUntil.Valid)
 }
