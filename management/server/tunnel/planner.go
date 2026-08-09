@@ -182,6 +182,8 @@ func plannerPeerState(
 	return PeerState{
 		SupportsHybridAWG2: peer.SupportsHybridAWG2,
 		SupportsHybridAWG3: peer.SupportsHybridAWG3,
+		KernelAWGRequired:  peer.KernelAWGRequired,
+		SupportsKernelAWG:  peer.SupportsKernelAWG,
 		Ready:              ready,
 		AssignedProtocol:   protocolVersion,
 		AssignedRevision:   profileRevision,
@@ -314,6 +316,9 @@ func assignedProtocol(
 	if peer == nil || profile == nil {
 		return ""
 	}
+	if peer.KernelAWGRequired && !peer.SupportsKernelAWG {
+		return ""
+	}
 	if profile.ProtocolVersion == clienttunnel.ProtocolAmneziaWG3 &&
 		peer.SupportsHybridAWG3 {
 		return clienttunnel.ProtocolAmneziaWG3
@@ -342,6 +347,10 @@ func modeForReadyProtocols(
 	leftProtocol,
 	rightProtocol string,
 ) proto.TunnelMode {
+	if !componentPeerHasUsableAWGBackend(left) ||
+		!componentPeerHasUsableAWGBackend(right) {
+		return proto.TunnelMode_TunnelModeStandard
+	}
 	if left.SupportsHybridAWG3 && right.SupportsHybridAWG3 &&
 		leftProtocol == clienttunnel.ProtocolAmneziaWG3 &&
 		rightProtocol == clienttunnel.ProtocolAmneziaWG3 {
@@ -352,6 +361,10 @@ func modeForReadyProtocols(
 		return proto.TunnelMode_TunnelModeAmneziaWG
 	}
 	return proto.TunnelMode_TunnelModeStandard
+}
+
+func componentPeerHasUsableAWGBackend(peer *sharedtypes.ComponentPeer) bool {
+	return peer != nil && (!peer.KernelAWGRequired || peer.SupportsKernelAWG)
 }
 
 func protocolForMode(mode proto.TunnelMode) string {

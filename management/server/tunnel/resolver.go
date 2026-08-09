@@ -31,6 +31,8 @@ const (
 type PeerState struct {
 	SupportsHybridAWG2 bool
 	SupportsHybridAWG3 bool
+	KernelAWGRequired  bool
+	SupportsKernelAWG  bool
 	Ready              bool
 	AssignedProtocol   string
 	AssignedRevision   uint64
@@ -130,6 +132,9 @@ func resolveRequireAWG(left, right PeerState) Decision {
 }
 
 func highestCommonMode(left, right PeerState) proto.TunnelMode {
+	if !hasUsableAWGBackend(left) || !hasUsableAWGBackend(right) {
+		return proto.TunnelMode_TunnelModeStandard
+	}
 	if left.SupportsHybridAWG3 && right.SupportsHybridAWG3 &&
 		left.AssignedProtocol == clienttunnel.ProtocolAmneziaWG3 &&
 		right.AssignedProtocol == clienttunnel.ProtocolAmneziaWG3 {
@@ -141,6 +146,10 @@ func highestCommonMode(left, right PeerState) proto.TunnelMode {
 		return proto.TunnelMode_TunnelModeAmneziaWG
 	}
 	return proto.TunnelMode_TunnelModeStandard
+}
+
+func hasUsableAWGBackend(peer PeerState) bool {
+	return !peer.KernelAWGRequired || peer.SupportsKernelAWG
 }
 
 func incompatibleReason(mode proto.TunnelMode, left, right PeerState) string {
