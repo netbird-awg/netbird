@@ -3,6 +3,7 @@ package debug
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net"
 	"net/netip"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/netbirdio/netbird/client/anonymize"
 	"github.com/netbirdio/netbird/client/configs"
@@ -33,16 +35,30 @@ func mustEncodePrefix(t *testing.T, p netip.Prefix) []byte {
 }
 
 func TestMaskSecretsRemovesAWG3HeaderProtectionKeys(t *testing.T) {
+	topLevelKey := []byte("top-level-tunnel-key")
+	networkMapKey := []byte("network-map-tunnel-key")
+	envelopeKey := []byte("envelope-tunnel-key")
 	response := &mgmProto.SyncResponse{
 		PeerConfig: &mgmProto.PeerConfig{
 			TunnelProfile: &mgmProto.TunnelProfile{
-				HeaderProtectionKey: bytes.Repeat([]byte{0x4a}, 32),
+				HeaderProtectionKey: topLevelKey,
 			},
 		},
 		NetworkMap: &mgmProto.NetworkMap{
 			PeerConfig: &mgmProto.PeerConfig{
 				TunnelProfile: &mgmProto.TunnelProfile{
-					HeaderProtectionKey: bytes.Repeat([]byte{0x5b}, 32),
+					HeaderProtectionKey: networkMapKey,
+				},
+			},
+		},
+		NetworkMapEnvelope: &mgmProto.NetworkMapEnvelope{
+			Payload: &mgmProto.NetworkMapEnvelope_Full{
+				Full: &mgmProto.NetworkMapComponentsFull{
+					PeerConfig: &mgmProto.PeerConfig{
+						TunnelProfile: &mgmProto.TunnelProfile{
+							HeaderProtectionKey: envelopeKey,
+						},
+					},
 				},
 			},
 		},
@@ -59,6 +75,16 @@ func TestMaskSecretsRemovesAWG3HeaderProtectionKeys(t *testing.T) {
 		t,
 		response.NetworkMap.PeerConfig.TunnelProfile.HeaderProtectionKey,
 	)
+	require.Empty(
+		t,
+		response.NetworkMapEnvelope.GetFull().PeerConfig.TunnelProfile.HeaderProtectionKey,
+	)
+
+	jsonBytes, err := protojson.Marshal(response)
+	require.NoError(t, err)
+	for _, key := range [][]byte{topLevelKey, networkMapKey, envelopeKey} {
+		require.NotContains(t, string(jsonBytes), base64.StdEncoding.EncodeToString(key))
+	}
 }
 
 func TestAnonymizeStateFile(t *testing.T) {

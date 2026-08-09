@@ -54,10 +54,7 @@ func (s *diskStore) Set(resp *mgmProto.SyncResponse) error {
 	if !ok {
 		return fmt.Errorf("clone sync response")
 	}
-	redactTunnelProfileKey(persisted.GetPeerConfig())
-	if networkMap := persisted.GetNetworkMap(); networkMap != nil {
-		redactTunnelProfileKey(networkMap.GetPeerConfig())
-	}
+	mgmProto.RedactTunnelProfileKeys(persisted)
 
 	bs, err := proto.Marshal(persisted)
 	if err != nil {
@@ -73,13 +70,6 @@ func (s *diskStore) Set(resp *mgmProto.SyncResponse) error {
 
 	log.Debugf("sync response persisted to %s (%d bytes)", s.path, len(bs))
 	return nil
-}
-
-func redactTunnelProfileKey(peerConfig *mgmProto.PeerConfig) {
-	if peerConfig == nil || peerConfig.TunnelProfile == nil {
-		return
-	}
-	peerConfig.TunnelProfile.HeaderProtectionKey = nil
 }
 
 func (s *diskStore) Get() (*mgmProto.SyncResponse, error) {

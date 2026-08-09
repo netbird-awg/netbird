@@ -893,17 +893,7 @@ func (g *BundleGenerator) maskSecrets() {
 		}
 	}
 
-	maskTunnelProfile(g.syncResponse.PeerConfig)
-	if g.syncResponse.NetworkMap != nil {
-		maskTunnelProfile(g.syncResponse.NetworkMap.PeerConfig)
-	}
-}
-
-func maskTunnelProfile(peerConfig *mgmProto.PeerConfig) {
-	if peerConfig == nil || peerConfig.TunnelProfile == nil {
-		return
-	}
-	peerConfig.TunnelProfile.HeaderProtectionKey = nil
+	mgmProto.RedactTunnelProfileKeys(g.syncResponse)
 }
 
 func (g *BundleGenerator) addStateFile() error {
