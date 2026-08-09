@@ -38,7 +38,7 @@ const (
 	awgKernelDeviceRejectAfterTime        uint16 = 30
 	awgKernelDeviceKeepaliveTimeout       uint16 = 31
 	awgKernelDeviceMaxHandshakeAttempts   uint16 = 32
-	awgKernelDeviceProfileRevision        uint16 = 34
+	awgKernelDeviceProfileRevision        uint16 = 33
 )
 
 type awgKernelTransportMode uint8
