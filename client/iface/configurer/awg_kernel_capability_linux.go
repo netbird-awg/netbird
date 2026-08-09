@@ -18,6 +18,7 @@ const (
 	awgKernelFamilyVersion = 3
 
 	awgKernelCommandGetDevice uint8 = iota
+	awgKernelCommandSetDevice
 
 	awgKernelDeviceIfName       uint16 = 2
 	awgKernelDeviceCapabilities uint16 = 35
