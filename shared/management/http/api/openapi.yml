@@ -405,23 +405,28 @@ components:
           example: ["ch8i4ug6lnn4g9hqv7m0"]
         tunnel_policy:
           description: Selects the account-wide tunnel compatibility policy.
+          deprecated: true
           type: string
           enum: ["standard", "prefer_awg", "require_awg"]
           example: prefer_awg
         tunnel_profile:
+          deprecated: true
           $ref: '#/components/schemas/TunnelProfile'
         pending_tunnel_profile:
           allOf:
             - $ref: '#/components/schemas/TunnelProfile'
           description: Profile distributed for readiness but not yet active.
+          deprecated: true
           readOnly: true
         tunnel_profile_grace_until:
           description: End of the bounded rollback window for the previous profile.
+          deprecated: true
           type: string
           format: date-time
           readOnly: true
         tunnel_profile_action:
           description: Activates the staged profile or stages the retained previous profile for rollback.
+          deprecated: true
           type: string
           enum: ["activate", "rollback"]
           writeOnly: true
@@ -461,6 +466,140 @@ components:
         - protocol_version
         - revision
         - parameters
+    TunnelLifecycleRequest:
+      description: A strict, tunnel-only lifecycle transition request.
+      type: object
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum: [stage, activate, cancel_pending, rollback, set_policy]
+        protocol_version:
+          type: string
+          enum: [awg2, awg3]
+        policy:
+          type: string
+          enum: [standard, prefer_awg, require_awg]
+        target_revision:
+          type: integer
+          format: uint64
+          minimum: 1
+        expected_active_revision:
+          description: Expected active revision, or zero when no active profile is expected.
+          type: integer
+          format: uint64
+          minimum: 0
+        expected_pending_revision:
+          description: Expected pending revision, or zero when no pending profile is expected.
+          type: integer
+          format: uint64
+          minimum: 0
+      required: [action]
+    TunnelLifecycleProfile:
+      description: A redacted tunnel profile reference.
+      type: object
+      additionalProperties: false
+      properties:
+        protocol_version:
+          type: string
+          enum: [awg2, awg3]
+        revision:
+          type: integer
+          format: uint64
+        updated_at:
+          type: string
+          format: date-time
+      required: [protocol_version, revision, updated_at]
+    TunnelLifecycleReadiness:
+      description: Privacy-safe aggregate readiness for the pending profile.
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum: [not_staged, ready, waiting]
+        eligible:
+          type: integer
+          minimum: 0
+        ready:
+          type: integer
+          minimum: 0
+        waiting:
+          type: integer
+          minimum: 0
+        excluded_offline:
+          type: integer
+          minimum: 0
+        incompatible:
+          type: integer
+          minimum: 0
+        pending_revision:
+          type: integer
+          format: uint64
+          minimum: 1
+        observed_at:
+          type: string
+          format: date-time
+        error_counts:
+          description: >-
+            Counts keyed only by the stable allowlist: adapter_incompatible,
+            protocol_mismatch, revision_mismatch, not_ready, clock_skew,
+            profile_invalid, invalid_runtime_metadata, and
+            incomplete_runtime_metadata. Unknown internal errors are normalized
+            to invalid_runtime_metadata.
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+      required:
+        - state
+        - eligible
+        - ready
+        - waiting
+        - excluded_offline
+        - incompatible
+        - observed_at
+        - error_counts
+    TunnelLifecycleResponse:
+      description: Redacted account tunnel lifecycle state.
+      type: object
+      additionalProperties: false
+      properties:
+        policy:
+          type: string
+          enum: [standard, prefer_awg, require_awg]
+        active:
+          $ref: '#/components/schemas/TunnelLifecycleProfile'
+        pending:
+          $ref: '#/components/schemas/TunnelLifecycleProfile'
+        previous:
+          $ref: '#/components/schemas/TunnelLifecycleProfile'
+        rollback_available:
+          type: boolean
+        rollback_grace_until:
+          type: string
+          format: date-time
+        readiness:
+          $ref: '#/components/schemas/TunnelLifecycleReadiness'
+      required: [policy, rollback_available, readiness]
+    TunnelLifecycleErrorResponse:
+      description: Stable tunnel lifecycle error response.
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum:
+            - invalid_request
+            - stale_active_revision
+            - stale_pending_revision
+            - stale_target_revision
+            - not_ready
+            - rollback_unavailable
+            - transition_rejected
+        message:
+          type: string
+      required: [code, message]
     AccountDashboardFeatures:
       description: Per-account dashboard section visibility overrides. Omitted keys follow the default dashboard behavior.
       type: object
@@ -7171,6 +7310,77 @@ paths:
           "$ref": "#/components/responses/requires_authentication"
         '403':
           "$ref": "#/components/responses/forbidden"
+        '500':
+          "$ref": "#/components/responses/internal_error"
+  /api/accounts/{accountId}/tunnel:
+    get:
+      summary: Get account tunnel lifecycle state
+      tags: [ Accounts ]
+      security:
+        - BearerAuth: [ ]
+        - TokenAuth: [ ]
+      parameters:
+        - in: path
+          name: accountId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Redacted tunnel lifecycle state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TunnelLifecycleResponse'
+        '401':
+          "$ref": "#/components/responses/requires_authentication"
+        '403':
+          "$ref": "#/components/responses/forbidden"
+        '404':
+          "$ref": "#/components/responses/not_found"
+        '500':
+          "$ref": "#/components/responses/internal_error"
+    patch:
+      summary: Apply an account tunnel lifecycle transition
+      tags: [ Accounts ]
+      security:
+        - BearerAuth: [ ]
+        - TokenAuth: [ ]
+      parameters:
+        - in: path
+          name: accountId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TunnelLifecycleRequest'
+      responses:
+        '200':
+          description: Redacted tunnel lifecycle state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TunnelLifecycleResponse'
+        '400':
+          description: Invalid lifecycle request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TunnelLifecycleErrorResponse'
+        '401':
+          "$ref": "#/components/responses/requires_authentication"
+        '403':
+          "$ref": "#/components/responses/forbidden"
+        '404':
+          "$ref": "#/components/responses/not_found"
+        '409':
+          description: Stale lifecycle target or readiness conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TunnelLifecycleErrorResponse'
         '500':
           "$ref": "#/components/responses/internal_error"
   /api/accounts/{accountId}:

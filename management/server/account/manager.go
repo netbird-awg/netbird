@@ -19,6 +19,7 @@ import (
 	nbpeer "github.com/netbirdio/netbird/management/server/peer"
 	"github.com/netbirdio/netbird/management/server/posture"
 	"github.com/netbirdio/netbird/management/server/store"
+	managementtunnel "github.com/netbirdio/netbird/management/server/tunnel"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/management/server/users"
 	"github.com/netbirdio/netbird/route"
@@ -127,6 +128,8 @@ type Manager interface {
 	FindExistingPostureCheck(accountID string, checks *posture.ChecksDefinition) (*posture.Checks, error)
 	GetAccountIDForPeerKey(ctx context.Context, peerKey string) (string, error)
 	GetAccountSettings(ctx context.Context, accountID string, userID string) (*types.Settings, error)
+	GetTunnelLifecycle(ctx context.Context, accountID, userID string) (*managementtunnel.LifecycleResult, error)
+	UpdateTunnelLifecycle(ctx context.Context, accountID, userID string, request managementtunnel.LifecycleRequest) (*managementtunnel.LifecycleResult, error)
 	DeleteSetupKey(ctx context.Context, accountID, userID, keyID string) error
 	UpdateAccountPeers(ctx context.Context, accountID string, reason types.UpdateReason)
 	ExpandAndUpdateAffected(ctx context.Context, accountID string, snap *affectedpeers.Snapshot, change affectedpeers.Change)

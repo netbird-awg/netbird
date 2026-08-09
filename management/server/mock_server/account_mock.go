@@ -20,6 +20,7 @@ import (
 	nbpeer "github.com/netbirdio/netbird/management/server/peer"
 	"github.com/netbirdio/netbird/management/server/posture"
 	"github.com/netbirdio/netbird/management/server/store"
+	managementtunnel "github.com/netbirdio/netbird/management/server/tunnel"
 	"github.com/netbirdio/netbird/management/server/types"
 	"github.com/netbirdio/netbird/management/server/users"
 	"github.com/netbirdio/netbird/route"
@@ -120,6 +121,8 @@ type MockAccountManager struct {
 	GetAccountByIDFunc                    func(ctx context.Context, accountID string, userID string) (*types.Account, error)
 	GetUserByIDFunc                       func(ctx context.Context, id string) (*types.User, error)
 	GetAccountSettingsFunc                func(ctx context.Context, accountID string, userID string) (*types.Settings, error)
+	GetTunnelLifecycleFunc                func(ctx context.Context, accountID, userID string) (*managementtunnel.LifecycleResult, error)
+	UpdateTunnelLifecycleFunc             func(ctx context.Context, accountID, userID string, request managementtunnel.LifecycleRequest) (*managementtunnel.LifecycleResult, error)
 	DeleteSetupKeyFunc                    func(ctx context.Context, accountID, userID, keyID string) error
 	BuildUserInfosForAccountFunc          func(ctx context.Context, accountID, initiatorUserID string, accountUsers []*types.User) (map[string]*types.UserInfo, error)
 	GetStoreFunc                          func() store.Store
@@ -1044,6 +1047,20 @@ func (am *MockAccountManager) GetAccountSettings(ctx context.Context, accountID 
 		return am.GetAccountSettingsFunc(ctx, accountID, userID)
 	}
 	return nil, status.Errorf(codes.Unimplemented, "method GetAccountSettings is not implemented")
+}
+
+func (am *MockAccountManager) GetTunnelLifecycle(ctx context.Context, accountID, userID string) (*managementtunnel.LifecycleResult, error) {
+	if am.GetTunnelLifecycleFunc != nil {
+		return am.GetTunnelLifecycleFunc(ctx, accountID, userID)
+	}
+	return nil, status.Errorf(codes.Unimplemented, "method GetTunnelLifecycle is not implemented")
+}
+
+func (am *MockAccountManager) UpdateTunnelLifecycle(ctx context.Context, accountID, userID string, request managementtunnel.LifecycleRequest) (*managementtunnel.LifecycleResult, error) {
+	if am.UpdateTunnelLifecycleFunc != nil {
+		return am.UpdateTunnelLifecycleFunc(ctx, accountID, userID, request)
+	}
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTunnelLifecycle is not implemented")
 }
 
 func (am *MockAccountManager) GetAccount(ctx context.Context, accountID string) (*types.Account, error) {

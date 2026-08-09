@@ -47,6 +47,7 @@ type handler struct {
 
 func AddEndpoints(accountManager account.Manager, settingsManager settings.Manager, router *mux.Router) {
 	accountsHandler := newHandler(accountManager, settingsManager)
+	addTunnelLifecycleEndpoints(accountManager, router)
 	router.HandleFunc("/accounts/{accountId}", accountsHandler.updateAccount).Methods("PUT", "OPTIONS")
 	router.HandleFunc("/accounts/{accountId}", accountsHandler.deleteAccount).Methods("DELETE", "OPTIONS")
 	router.HandleFunc("/accounts", accountsHandler.getAllAccounts).Methods("GET", "OPTIONS")

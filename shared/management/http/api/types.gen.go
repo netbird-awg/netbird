@@ -1394,6 +1394,165 @@ func (e TenantResponseStatus) Valid() bool {
 	}
 }
 
+// Defines values for TunnelLifecycleErrorResponseCode.
+const (
+	TunnelLifecycleErrorResponseCodeInvalidRequest       TunnelLifecycleErrorResponseCode = "invalid_request"
+	TunnelLifecycleErrorResponseCodeNotReady             TunnelLifecycleErrorResponseCode = "not_ready"
+	TunnelLifecycleErrorResponseCodeRollbackUnavailable  TunnelLifecycleErrorResponseCode = "rollback_unavailable"
+	TunnelLifecycleErrorResponseCodeStaleActiveRevision  TunnelLifecycleErrorResponseCode = "stale_active_revision"
+	TunnelLifecycleErrorResponseCodeStalePendingRevision TunnelLifecycleErrorResponseCode = "stale_pending_revision"
+	TunnelLifecycleErrorResponseCodeStaleTargetRevision  TunnelLifecycleErrorResponseCode = "stale_target_revision"
+	TunnelLifecycleErrorResponseCodeTransitionRejected   TunnelLifecycleErrorResponseCode = "transition_rejected"
+)
+
+// Valid indicates whether the value is a known member of the TunnelLifecycleErrorResponseCode enum.
+func (e TunnelLifecycleErrorResponseCode) Valid() bool {
+	switch e {
+	case TunnelLifecycleErrorResponseCodeInvalidRequest:
+		return true
+	case TunnelLifecycleErrorResponseCodeNotReady:
+		return true
+	case TunnelLifecycleErrorResponseCodeRollbackUnavailable:
+		return true
+	case TunnelLifecycleErrorResponseCodeStaleActiveRevision:
+		return true
+	case TunnelLifecycleErrorResponseCodeStalePendingRevision:
+		return true
+	case TunnelLifecycleErrorResponseCodeStaleTargetRevision:
+		return true
+	case TunnelLifecycleErrorResponseCodeTransitionRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TunnelLifecycleProfileProtocolVersion.
+const (
+	TunnelLifecycleProfileProtocolVersionAwg2 TunnelLifecycleProfileProtocolVersion = "awg2"
+	TunnelLifecycleProfileProtocolVersionAwg3 TunnelLifecycleProfileProtocolVersion = "awg3"
+)
+
+// Valid indicates whether the value is a known member of the TunnelLifecycleProfileProtocolVersion enum.
+func (e TunnelLifecycleProfileProtocolVersion) Valid() bool {
+	switch e {
+	case TunnelLifecycleProfileProtocolVersionAwg2:
+		return true
+	case TunnelLifecycleProfileProtocolVersionAwg3:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TunnelLifecycleReadinessState.
+const (
+	TunnelLifecycleReadinessStateNotStaged TunnelLifecycleReadinessState = "not_staged"
+	TunnelLifecycleReadinessStateReady     TunnelLifecycleReadinessState = "ready"
+	TunnelLifecycleReadinessStateWaiting   TunnelLifecycleReadinessState = "waiting"
+)
+
+// Valid indicates whether the value is a known member of the TunnelLifecycleReadinessState enum.
+func (e TunnelLifecycleReadinessState) Valid() bool {
+	switch e {
+	case TunnelLifecycleReadinessStateNotStaged:
+		return true
+	case TunnelLifecycleReadinessStateReady:
+		return true
+	case TunnelLifecycleReadinessStateWaiting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TunnelLifecycleRequestAction.
+const (
+	TunnelLifecycleRequestActionActivate      TunnelLifecycleRequestAction = "activate"
+	TunnelLifecycleRequestActionCancelPending TunnelLifecycleRequestAction = "cancel_pending"
+	TunnelLifecycleRequestActionRollback      TunnelLifecycleRequestAction = "rollback"
+	TunnelLifecycleRequestActionSetPolicy     TunnelLifecycleRequestAction = "set_policy"
+	TunnelLifecycleRequestActionStage         TunnelLifecycleRequestAction = "stage"
+)
+
+// Valid indicates whether the value is a known member of the TunnelLifecycleRequestAction enum.
+func (e TunnelLifecycleRequestAction) Valid() bool {
+	switch e {
+	case TunnelLifecycleRequestActionActivate:
+		return true
+	case TunnelLifecycleRequestActionCancelPending:
+		return true
+	case TunnelLifecycleRequestActionRollback:
+		return true
+	case TunnelLifecycleRequestActionSetPolicy:
+		return true
+	case TunnelLifecycleRequestActionStage:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TunnelLifecycleRequestPolicy.
+const (
+	TunnelLifecycleRequestPolicyPreferAwg  TunnelLifecycleRequestPolicy = "prefer_awg"
+	TunnelLifecycleRequestPolicyRequireAwg TunnelLifecycleRequestPolicy = "require_awg"
+	TunnelLifecycleRequestPolicyStandard   TunnelLifecycleRequestPolicy = "standard"
+)
+
+// Valid indicates whether the value is a known member of the TunnelLifecycleRequestPolicy enum.
+func (e TunnelLifecycleRequestPolicy) Valid() bool {
+	switch e {
+	case TunnelLifecycleRequestPolicyPreferAwg:
+		return true
+	case TunnelLifecycleRequestPolicyRequireAwg:
+		return true
+	case TunnelLifecycleRequestPolicyStandard:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TunnelLifecycleRequestProtocolVersion.
+const (
+	TunnelLifecycleRequestProtocolVersionAwg2 TunnelLifecycleRequestProtocolVersion = "awg2"
+	TunnelLifecycleRequestProtocolVersionAwg3 TunnelLifecycleRequestProtocolVersion = "awg3"
+)
+
+// Valid indicates whether the value is a known member of the TunnelLifecycleRequestProtocolVersion enum.
+func (e TunnelLifecycleRequestProtocolVersion) Valid() bool {
+	switch e {
+	case TunnelLifecycleRequestProtocolVersionAwg2:
+		return true
+	case TunnelLifecycleRequestProtocolVersionAwg3:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TunnelLifecycleResponsePolicy.
+const (
+	TunnelLifecycleResponsePolicyPreferAwg  TunnelLifecycleResponsePolicy = "prefer_awg"
+	TunnelLifecycleResponsePolicyRequireAwg TunnelLifecycleResponsePolicy = "require_awg"
+	TunnelLifecycleResponsePolicyStandard   TunnelLifecycleResponsePolicy = "standard"
+)
+
+// Valid indicates whether the value is a known member of the TunnelLifecycleResponsePolicy enum.
+func (e TunnelLifecycleResponsePolicy) Valid() bool {
+	switch e {
+	case TunnelLifecycleResponsePolicyPreferAwg:
+		return true
+	case TunnelLifecycleResponsePolicyRequireAwg:
+		return true
+	case TunnelLifecycleResponsePolicyStandard:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TunnelProfileProtocolVersion.
 const (
 	TunnelProfileProtocolVersionAwg2 TunnelProfileProtocolVersion = "awg2"
@@ -2054,6 +2213,7 @@ type AccountSettings struct {
 	PeerLoginExpirationEnabled bool `json:"peer_login_expiration_enabled"`
 
 	// PendingTunnelProfile Profile distributed for readiness but not yet active.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PendingTunnelProfile *TunnelProfile `json:"pending_tunnel_profile,omitempty"`
 
 	// RegularUsersViewBlocked Allows blocking regular users from viewing parts of the system.
@@ -2063,15 +2223,18 @@ type AccountSettings struct {
 	RoutingPeerDnsResolutionEnabled *bool `json:"routing_peer_dns_resolution_enabled,omitempty"`
 
 	// TunnelPolicy Selects the account-wide tunnel compatibility policy.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	TunnelPolicy *AccountSettingsTunnelPolicy `json:"tunnel_policy,omitempty"`
 
 	// TunnelProfile Account-wide, immutable-revision AmneziaWG tunnel profile.
 	TunnelProfile *TunnelProfile `json:"tunnel_profile,omitempty"`
 
 	// TunnelProfileAction Activates the staged profile or stages the retained previous profile for rollback.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	TunnelProfileAction *AccountSettingsTunnelProfileAction `json:"tunnel_profile_action,omitempty"`
 
 	// TunnelProfileGraceUntil End of the bounded rollback window for the previous profile.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	TunnelProfileGraceUntil *time.Time `json:"tunnel_profile_grace_until,omitempty"`
 }
 
@@ -6095,6 +6258,87 @@ type TenantResponse struct {
 // TenantResponseStatus The status of the tenant
 type TenantResponseStatus string
 
+// TunnelLifecycleErrorResponse Stable tunnel lifecycle error response.
+type TunnelLifecycleErrorResponse struct {
+	Code    TunnelLifecycleErrorResponseCode `json:"code"`
+	Message string                           `json:"message"`
+}
+
+// TunnelLifecycleErrorResponseCode defines model for TunnelLifecycleErrorResponse.Code.
+type TunnelLifecycleErrorResponseCode string
+
+// TunnelLifecycleProfile A redacted tunnel profile reference.
+type TunnelLifecycleProfile struct {
+	ProtocolVersion TunnelLifecycleProfileProtocolVersion `json:"protocol_version"`
+	Revision        uint64                                `json:"revision"`
+	UpdatedAt       time.Time                             `json:"updated_at"`
+}
+
+// TunnelLifecycleProfileProtocolVersion defines model for TunnelLifecycleProfile.ProtocolVersion.
+type TunnelLifecycleProfileProtocolVersion string
+
+// TunnelLifecycleReadiness Privacy-safe aggregate readiness for the pending profile.
+type TunnelLifecycleReadiness struct {
+	Eligible int `json:"eligible"`
+
+	// ErrorCounts Counts keyed only by the stable allowlist: adapter_incompatible, protocol_mismatch, revision_mismatch, not_ready, clock_skew, profile_invalid, invalid_runtime_metadata, and incomplete_runtime_metadata. Unknown internal errors are normalized to invalid_runtime_metadata.
+	ErrorCounts     map[string]int                `json:"error_counts"`
+	ExcludedOffline int                           `json:"excluded_offline"`
+	Incompatible    int                           `json:"incompatible"`
+	ObservedAt      time.Time                     `json:"observed_at"`
+	PendingRevision *uint64                       `json:"pending_revision,omitempty"`
+	Ready           int                           `json:"ready"`
+	State           TunnelLifecycleReadinessState `json:"state"`
+	Waiting         int                           `json:"waiting"`
+}
+
+// TunnelLifecycleReadinessState defines model for TunnelLifecycleReadiness.State.
+type TunnelLifecycleReadinessState string
+
+// TunnelLifecycleRequest A strict, tunnel-only lifecycle transition request.
+type TunnelLifecycleRequest struct {
+	Action TunnelLifecycleRequestAction `json:"action"`
+
+	// ExpectedActiveRevision Expected active revision, or zero when no active profile is expected.
+	ExpectedActiveRevision *uint64 `json:"expected_active_revision,omitempty"`
+
+	// ExpectedPendingRevision Expected pending revision, or zero when no pending profile is expected.
+	ExpectedPendingRevision *uint64                                `json:"expected_pending_revision,omitempty"`
+	Policy                  *TunnelLifecycleRequestPolicy          `json:"policy,omitempty"`
+	ProtocolVersion         *TunnelLifecycleRequestProtocolVersion `json:"protocol_version,omitempty"`
+	TargetRevision          *uint64                                `json:"target_revision,omitempty"`
+}
+
+// TunnelLifecycleRequestAction defines model for TunnelLifecycleRequest.Action.
+type TunnelLifecycleRequestAction string
+
+// TunnelLifecycleRequestPolicy defines model for TunnelLifecycleRequest.Policy.
+type TunnelLifecycleRequestPolicy string
+
+// TunnelLifecycleRequestProtocolVersion defines model for TunnelLifecycleRequest.ProtocolVersion.
+type TunnelLifecycleRequestProtocolVersion string
+
+// TunnelLifecycleResponse Redacted account tunnel lifecycle state.
+type TunnelLifecycleResponse struct {
+	// Active A redacted tunnel profile reference.
+	Active *TunnelLifecycleProfile `json:"active,omitempty"`
+
+	// Pending A redacted tunnel profile reference.
+	Pending *TunnelLifecycleProfile       `json:"pending,omitempty"`
+	Policy  TunnelLifecycleResponsePolicy `json:"policy"`
+
+	// Previous A redacted tunnel profile reference.
+	Previous *TunnelLifecycleProfile `json:"previous,omitempty"`
+
+	// Readiness Privacy-safe aggregate readiness for the pending profile.
+	Readiness          TunnelLifecycleReadiness `json:"readiness"`
+	RollbackAvailable  bool                     `json:"rollback_available"`
+	RollbackGraceUntil *time.Time               `json:"rollback_grace_until,omitempty"`
+}
+
+// TunnelLifecycleResponsePolicy defines model for TunnelLifecycleResponse.Policy.
+type TunnelLifecycleResponsePolicy string
+
 // TunnelProfile Account-wide, immutable-revision AmneziaWG tunnel profile.
 type TunnelProfile struct {
 	// Parameters Bounded protocol parameters validated by Management.
@@ -6870,6 +7114,9 @@ type GetApiUsersParams struct {
 
 // PutApiAccountsAccountIdJSONRequestBody defines body for PutApiAccountsAccountId for application/json ContentType.
 type PutApiAccountsAccountIdJSONRequestBody = AccountRequest
+
+// PatchApiAccountsAccountIdTunnelJSONRequestBody defines body for PatchApiAccountsAccountIdTunnel for application/json ContentType.
+type PatchApiAccountsAccountIdTunnelJSONRequestBody = TunnelLifecycleRequest
 
 // PostApiAgentNetworkBudgetRulesJSONRequestBody defines body for PostApiAgentNetworkBudgetRules for application/json ContentType.
 type PostApiAgentNetworkBudgetRulesJSONRequestBody = AgentNetworkBudgetRuleRequest

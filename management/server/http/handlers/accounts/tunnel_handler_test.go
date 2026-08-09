@@ -95,20 +95,32 @@ func TestToAccountResponseMapsTunnelConfiguration(t *testing.T) {
 }
 
 func TestToAccountResponseDoesNotExposeAWG3HeaderKey(t *testing.T) {
+	activePlaintext := bytes.Repeat([]byte{0x5a}, 32)
+	pendingPlaintext := bytes.Repeat([]byte{0x6b}, 32)
+	previousPlaintext := bytes.Repeat([]byte{0x7c}, 32)
 	response := toAccountResponse(
 		"account",
 		&types.Settings{
 			TunnelProfile: &types.TunnelProfile{
-				ProtocolVersion:     "awg3",
-				Revision:            4,
-				Parameters:          json.RawMessage(`{"content_padding_addition":"1-16"}`),
-				HeaderProtectionKey: bytes.Repeat([]byte{0x5a}, 32),
+				ProtocolVersion:              "awg3",
+				Revision:                     4,
+				Parameters:                   json.RawMessage(`{"content_padding_addition":"1-16"}`),
+				HeaderProtectionKey:          activePlaintext,
+				EncryptedHeaderProtectionKey: "active-ciphertext",
 			},
 			TunnelProfilePending: &types.TunnelProfile{
-				ProtocolVersion:     "awg3",
-				Revision:            5,
-				Parameters:          json.RawMessage(`{"content_padding_addition":"1-8"}`),
-				HeaderProtectionKey: bytes.Repeat([]byte{0x6b}, 32),
+				ProtocolVersion:              "awg3",
+				Revision:                     5,
+				Parameters:                   json.RawMessage(`{"content_padding_addition":"1-8"}`),
+				HeaderProtectionKey:          pendingPlaintext,
+				EncryptedHeaderProtectionKey: "pending-ciphertext",
+			},
+			TunnelProfilePrevious: &types.TunnelProfile{
+				ProtocolVersion:              "awg3",
+				Revision:                     3,
+				Parameters:                   json.RawMessage(`{"previous_parameter":"safe"}`),
+				HeaderProtectionKey:          previousPlaintext,
+				EncryptedHeaderProtectionKey: "previous-ciphertext",
 			},
 		},
 		&types.AccountMeta{},
@@ -116,17 +128,19 @@ func TestToAccountResponseDoesNotExposeAWG3HeaderKey(t *testing.T) {
 	)
 
 	require.NotNil(t, response.Settings.TunnelProfile)
-	encoded, err := json.Marshal(response.Settings.TunnelProfile)
+	encoded, err := json.Marshal(response)
 	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "header_protection")
-	require.NotContains(
-		t,
-		string(encoded),
-		base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x5a}, 32)),
-	)
-	require.NotContains(
-		t,
-		string(encoded),
-		base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x6b}, 32)),
-	)
+	body := string(encoded)
+	for _, secret := range []string{
+		base64.StdEncoding.EncodeToString(activePlaintext),
+		base64.StdEncoding.EncodeToString(pendingPlaintext),
+		base64.StdEncoding.EncodeToString(previousPlaintext),
+		"active-ciphertext",
+		"pending-ciphertext",
+		"previous-ciphertext",
+		"header_protection_key",
+		"encrypted_header_protection_key",
+	} {
+		require.NotContains(t, body, secret)
+	}
 }

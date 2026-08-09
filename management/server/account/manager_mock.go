@@ -20,6 +20,7 @@ import (
 	peer "github.com/netbirdio/netbird/management/server/peer"
 	posture "github.com/netbirdio/netbird/management/server/posture"
 	store "github.com/netbirdio/netbird/management/server/store"
+	tunnel "github.com/netbirdio/netbird/management/server/tunnel"
 	types "github.com/netbirdio/netbird/management/server/types"
 	users "github.com/netbirdio/netbird/management/server/users"
 	route "github.com/netbirdio/netbird/route"
@@ -342,21 +343,6 @@ func (mr *MockManagerMockRecorder) DeleteIdentityProvider(ctx, accountID, idpID,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteIdentityProvider", reflect.TypeOf((*MockManager)(nil).DeleteIdentityProvider), ctx, accountID, idpID, userID)
 }
 
-// ListLDAPGroups mocks base method.
-func (m *MockManager) ListLDAPGroups(ctx context.Context, accountID, idpID, userID string) ([]string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListLDAPGroups", ctx, accountID, idpID, userID)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListLDAPGroups indicates an expected call of ListLDAPGroups.
-func (mr *MockManagerMockRecorder) ListLDAPGroups(ctx, accountID, idpID, userID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLDAPGroups", reflect.TypeOf((*MockManager)(nil).ListLDAPGroups), ctx, accountID, idpID, userID)
-}
-
 // DeleteNameServerGroup mocks base method.
 func (m *MockManager) DeleteNameServerGroup(ctx context.Context, accountID, nsGroupID, userID string) error {
 	m.ctrl.T.Helper()
@@ -495,6 +481,33 @@ func (m *MockManager) DeleteUserInvite(ctx context.Context, accountID, initiator
 func (mr *MockManagerMockRecorder) DeleteUserInvite(ctx, accountID, initiatorUserID, inviteID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUserInvite", reflect.TypeOf((*MockManager)(nil).DeleteUserInvite), ctx, accountID, initiatorUserID, inviteID)
+}
+
+// ExpandAndUpdateAffected mocks base method.
+func (m *MockManager) ExpandAndUpdateAffected(ctx context.Context, accountID string, snap *affectedpeers.Snapshot, change affectedpeers.Change) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ExpandAndUpdateAffected", ctx, accountID, snap, change)
+}
+
+// ExpandAndUpdateAffected indicates an expected call of ExpandAndUpdateAffected.
+func (mr *MockManagerMockRecorder) ExpandAndUpdateAffected(ctx, accountID, snap, change interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpandAndUpdateAffected", reflect.TypeOf((*MockManager)(nil).ExpandAndUpdateAffected), ctx, accountID, snap, change)
+}
+
+// ExtendPeerSession mocks base method.
+func (m *MockManager) ExtendPeerSession(ctx context.Context, peerPubKey, userID string) (time.Time, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExtendPeerSession", ctx, peerPubKey, userID)
+	ret0, _ := ret[0].(time.Time)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExtendPeerSession indicates an expected call of ExtendPeerSession.
+func (mr *MockManagerMockRecorder) ExtendPeerSession(ctx, peerPubKey, userID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtendPeerSession", reflect.TypeOf((*MockManager)(nil).ExtendPeerSession), ctx, peerPubKey, userID)
 }
 
 // FindExistingPostureCheck mocks base method.
@@ -1051,6 +1064,21 @@ func (mr *MockManagerMockRecorder) GetStore() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStore", reflect.TypeOf((*MockManager)(nil).GetStore))
 }
 
+// GetTunnelLifecycle mocks base method.
+func (m *MockManager) GetTunnelLifecycle(ctx context.Context, accountID, userID string) (*tunnel.LifecycleResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTunnelLifecycle", ctx, accountID, userID)
+	ret0, _ := ret[0].(*tunnel.LifecycleResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTunnelLifecycle indicates an expected call of GetTunnelLifecycle.
+func (mr *MockManagerMockRecorder) GetTunnelLifecycle(ctx, accountID, userID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTunnelLifecycle", reflect.TypeOf((*MockManager)(nil).GetTunnelLifecycle), ctx, accountID, userID)
+}
+
 // GetUserByID mocks base method.
 func (m *MockManager) GetUserByID(ctx context.Context, id string) (*types.User, error) {
 	m.ctrl.T.Helper()
@@ -1199,6 +1227,21 @@ func (mr *MockManagerMockRecorder) InviteUser(ctx, accountID, initiatorUserID, t
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InviteUser", reflect.TypeOf((*MockManager)(nil).InviteUser), ctx, accountID, initiatorUserID, targetUserID)
 }
 
+// ListLDAPGroups mocks base method.
+func (m *MockManager) ListLDAPGroups(ctx context.Context, accountID, idpID, userID string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListLDAPGroups", ctx, accountID, idpID, userID)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListLDAPGroups indicates an expected call of ListLDAPGroups.
+func (mr *MockManagerMockRecorder) ListLDAPGroups(ctx, accountID, idpID, userID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLDAPGroups", reflect.TypeOf((*MockManager)(nil).ListLDAPGroups), ctx, accountID, idpID, userID)
+}
+
 // ListNameServerGroups mocks base method.
 func (m *MockManager) ListNameServerGroups(ctx context.Context, accountID, userID string) ([]*dns.NameServerGroup, error) {
 	m.ctrl.T.Helper()
@@ -1322,23 +1365,8 @@ func (mr *MockManagerMockRecorder) LoginPeer(ctx, login interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoginPeer", reflect.TypeOf((*MockManager)(nil).LoginPeer), ctx, login)
 }
 
-// ExtendPeerSession mocks base method.
-func (m *MockManager) ExtendPeerSession(ctx context.Context, peerPubKey, userID string) (time.Time, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExtendPeerSession", ctx, peerPubKey, userID)
-	ret0, _ := ret[0].(time.Time)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ExtendPeerSession indicates an expected call of ExtendPeerSession.
-func (mr *MockManagerMockRecorder) ExtendPeerSession(ctx, peerPubKey, userID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtendPeerSession", reflect.TypeOf((*MockManager)(nil).ExtendPeerSession), ctx, peerPubKey, userID)
-}
-
 // MarkPeerConnected mocks base method.
-func (m *MockManager) MarkPeerConnected(ctx context.Context, peerKey string, accountID string, sessionStartedAt int64, nmap *types.NetworkMap) error {
+func (m *MockManager) MarkPeerConnected(ctx context.Context, peerKey, accountID string, sessionStartedAt int64, nmap *types.NetworkMap) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MarkPeerConnected", ctx, peerKey, accountID, sessionStartedAt, nmap)
 	ret0, _ := ret[0].(error)
@@ -1352,7 +1380,7 @@ func (mr *MockManagerMockRecorder) MarkPeerConnected(ctx, peerKey, accountID, se
 }
 
 // MarkPeerDisconnected mocks base method.
-func (m *MockManager) MarkPeerDisconnected(ctx context.Context, peerKey string, accountID string, sessionStartedAt int64) error {
+func (m *MockManager) MarkPeerDisconnected(ctx context.Context, peerKey, accountID string, sessionStartedAt int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MarkPeerDisconnected", ctx, peerKey, accountID, sessionStartedAt)
 	ret0, _ := ret[0].(error)
@@ -1655,18 +1683,6 @@ func (mr *MockManagerMockRecorder) UpdateAccountPeers(ctx, accountID, reason int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAccountPeers", reflect.TypeOf((*MockManager)(nil).UpdateAccountPeers), ctx, accountID, reason)
 }
 
-// ExpandAndUpdateAffected mocks base method.
-func (m *MockManager) ExpandAndUpdateAffected(ctx context.Context, accountID string, snap *affectedpeers.Snapshot, change affectedpeers.Change) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExpandAndUpdateAffected", ctx, accountID, snap, change)
-}
-
-// ExpandAndUpdateAffected indicates an expected call of ExpandAndUpdateAffected.
-func (mr *MockManagerMockRecorder) ExpandAndUpdateAffected(ctx, accountID, snap, change interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpandAndUpdateAffected", reflect.TypeOf((*MockManager)(nil).ExpandAndUpdateAffected), ctx, accountID, snap, change)
-}
-
 // UpdateAccountSettings mocks base method.
 func (m *MockManager) UpdateAccountSettings(ctx context.Context, accountID, userID string, newSettings *types.Settings) (*types.Settings, error) {
 	m.ctrl.T.Helper()
@@ -1768,6 +1784,7 @@ func (mr *MockManagerMockRecorder) UpdatePeerIP(ctx, accountID, userID, peerID, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePeerIP", reflect.TypeOf((*MockManager)(nil).UpdatePeerIP), ctx, accountID, userID, peerID, newIP)
 }
 
+// UpdatePeerIPv6 mocks base method.
 func (m *MockManager) UpdatePeerIPv6(ctx context.Context, accountID, userID, peerID string, newIPv6 netip.Addr) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdatePeerIPv6", ctx, accountID, userID, peerID, newIPv6)
@@ -1775,6 +1792,7 @@ func (m *MockManager) UpdatePeerIPv6(ctx context.Context, accountID, userID, pee
 	return ret0
 }
 
+// UpdatePeerIPv6 indicates an expected call of UpdatePeerIPv6.
 func (mr *MockManagerMockRecorder) UpdatePeerIPv6(ctx, accountID, userID, peerID, newIPv6 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePeerIPv6", reflect.TypeOf((*MockManager)(nil).UpdatePeerIPv6), ctx, accountID, userID, peerID, newIPv6)
@@ -1792,6 +1810,21 @@ func (m *MockManager) UpdateToPrimaryAccount(ctx context.Context, accountId stri
 func (mr *MockManagerMockRecorder) UpdateToPrimaryAccount(ctx, accountId interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateToPrimaryAccount", reflect.TypeOf((*MockManager)(nil).UpdateToPrimaryAccount), ctx, accountId)
+}
+
+// UpdateTunnelLifecycle mocks base method.
+func (m *MockManager) UpdateTunnelLifecycle(ctx context.Context, accountID, userID string, request tunnel.LifecycleRequest) (*tunnel.LifecycleResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTunnelLifecycle", ctx, accountID, userID, request)
+	ret0, _ := ret[0].(*tunnel.LifecycleResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTunnelLifecycle indicates an expected call of UpdateTunnelLifecycle.
+func (mr *MockManagerMockRecorder) UpdateTunnelLifecycle(ctx, accountID, userID, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTunnelLifecycle", reflect.TypeOf((*MockManager)(nil).UpdateTunnelLifecycle), ctx, accountID, userID, request)
 }
 
 // UpdateUserPassword mocks base method.
