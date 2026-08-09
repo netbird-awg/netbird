@@ -34,8 +34,8 @@ var (
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Display Netibird-AWG client status",
-	Long:  "Display the current status of the Netibird-AWG client, including connection status, peer information, and network details.",
+	Short: "Display NetBird-AWG client status",
+	Long:  "Display the current status of the NetBird-AWG client, including connection status, peer information, and network details.",
 	RunE:  statusFunc,
 }
 
@@ -45,8 +45,8 @@ func init() {
 	statusCmd.PersistentFlags().BoolVarP(&detailFlag, "detail", "d", false, "display detailed status information in human-readable format")
 	statusCmd.PersistentFlags().BoolVarP(&jsonFlag, "json", "j", false, "display detailed status information in json format")
 	statusCmd.PersistentFlags().BoolVarP(&yamlFlag, "yaml", "y", false, "display detailed status information in yaml format")
-	statusCmd.PersistentFlags().BoolVarP(&ipv4Flag, "ipv4", "4", false, "display only Netibird-AWG IPv4 of this peer, e.g., --ipv4 will output 100.64.0.33")
-	statusCmd.PersistentFlags().BoolVarP(&ipv6Flag, "ipv6", "6", false, "display only Netibird-AWG IPv6 of this peer")
+	statusCmd.PersistentFlags().BoolVarP(&ipv4Flag, "ipv4", "4", false, "display only NetBird-AWG IPv4 of this peer, e.g., --ipv4 will output 100.64.0.33")
+	statusCmd.PersistentFlags().BoolVarP(&ipv6Flag, "ipv6", "6", false, "display only NetBird-AWG IPv6 of this peer")
 	statusCmd.MarkFlagsMutuallyExclusive("detail", "json", "yaml", "ipv4", "ipv6")
 	statusCmd.PersistentFlags().StringSliceVarP(&ipsFilter, "filter-by-ips", "I", []string{}, "filters the detailed output by a list of one or more IPs (v4 or v6), e.g., --filter-by-ips 100.64.0.100,fd00::1")
 	statusCmd.PersistentFlags().StringSliceVarP(&prefixNamesFilter, "filter-by-names", "N", []string{}, "filters the detailed output by a list of one or more peer FQDN or hostnames, e.g., --filter-by-names peer-a,peer-b.netbird.cloud")

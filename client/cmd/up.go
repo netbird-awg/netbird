@@ -59,8 +59,8 @@ var (
 
 	upCmd = &cobra.Command{
 		Use:   "up",
-		Short: "Connect to the Netibird-AWG network",
-		Long:  "Connect to the Netibird-AWG network using the provided setup key or SSO auth. This command will bring up the WireGuard interface, connect to the management server, and establish peer-to-peer connections with other peers in the network if required.",
+		Short: "Connect to the NetBird-AWG network",
+		Long:  "Connect to the NetBird-AWG network using the provided setup key or SSO auth. This command will bring up the WireGuard interface, connect to the management server, and establish peer-to-peer connections with other peers in the network if required.",
 		RunE:  upFunc,
 	}
 )
@@ -88,7 +88,7 @@ func init() {
 	upCmd.PersistentFlags().BoolVar(&noBrowser, noBrowserFlag, false, noBrowserDesc)
 	upCmd.PersistentFlags().BoolVar(&showQR, showQRFlag, false, showQRDesc)
 	upCmd.PersistentFlags().StringVar(&profileName, profileNameFlag, "", profileNameDesc)
-	upCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "(DEPRECATED) Netibird-AWG config file location. ")
+	upCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "(DEPRECATED) NetBird-AWG config file location. ")
 
 }
 
