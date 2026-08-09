@@ -50,7 +50,7 @@ func QueryAWGKernelCapabilities(deviceName string) (AWGKernelCapabilities, error
 	}
 
 	capabilities, queryErr := control.capabilities(deviceName)
-	closeErr := control.close()
+	closeErr := control.Close()
 	if queryErr != nil {
 		return 0, fmt.Errorf("query AmneziaWG kernel capabilities: %w", queryErr)
 	}
@@ -92,15 +92,25 @@ func newAWGKernelCapabilityControl() (*awgKernelCapabilityControl, error) {
 	return &awgKernelCapabilityControl{conn: conn, family: family}, nil
 }
 
-func (c *awgKernelCapabilityControl) close() error {
+func (c *awgKernelCapabilityControl) Close() error {
 	return c.conn.Close()
 }
 
 func (c *awgKernelCapabilityControl) capabilities(
 	deviceName string,
 ) (AWGKernelCapabilities, error) {
+	messages, err := c.getDevice(deviceName)
+	if err != nil {
+		return 0, err
+	}
+	return parseAWGKernelCapabilities(messages)
+}
+
+func (c *awgKernelCapabilityControl) getDevice(
+	deviceName string,
+) ([]genetlink.Message, error) {
 	if deviceName == "" {
-		return 0, os.ErrNotExist
+		return nil, os.ErrNotExist
 	}
 
 	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
@@ -108,7 +118,7 @@ func (c *awgKernelCapabilityControl) capabilities(
 		Data: nlenc.Bytes(deviceName),
 	}})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	messages, err := c.conn.Execute(genetlink.Message{
@@ -119,10 +129,9 @@ func (c *awgKernelCapabilityControl) capabilities(
 		Data: attributes,
 	}, c.family.ID, netlink.Request|netlink.Dump)
 	if err != nil {
-		return 0, normalizeAWGKernelNetlinkError(err)
+		return nil, normalizeAWGKernelNetlinkError(err)
 	}
-
-	return parseAWGKernelCapabilities(messages)
+	return messages, nil
 }
 
 func parseAWGKernelCapabilities(
