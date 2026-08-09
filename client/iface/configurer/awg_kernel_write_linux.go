@@ -35,6 +35,28 @@ func (c *awgKernelCapabilityControl) ConfigureDevice(
 	return c.setDevice(attributes)
 }
 
+func (c *awgKernelCapabilityControl) ConfigurePeer(
+	name string,
+	peer wgtypes.PeerConfig,
+	persistentKeepaliveRange *uint32,
+) error {
+	var ranges map[wgtypes.Key]uint32
+	if persistentKeepaliveRange != nil {
+		ranges = map[wgtypes.Key]uint32{
+			peer.PublicKey: *persistentKeepaliveRange,
+		}
+	}
+	attributes, err := encodeAWGKernelConfig(
+		name,
+		wgtypes.Config{Peers: []wgtypes.PeerConfig{peer}},
+		ranges,
+	)
+	if err != nil {
+		return err
+	}
+	return c.setDevice(attributes)
+}
+
 func (c *awgKernelCapabilityControl) setDevice(attributes []byte) error {
 	_, err := c.conn.Execute(genetlink.Message{
 		Header: genetlink.Header{
