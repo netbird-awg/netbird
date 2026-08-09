@@ -128,6 +128,11 @@ func TestModuleStatus(t *testing.T) {
 	}
 }
 
+func TestKernelLinkKinds(t *testing.T) {
+	require.Equal(t, "wireguard", newWGLink("wg0").Type())
+	require.Equal(t, "amneziawg", newAWGLink("awg0").Type())
+}
+
 func resetGlobals() {
 	moduleLibDir = defaultModuleDir
 	moduleRoot = getModuleRoot()

@@ -35,6 +35,8 @@ const (
 	inuse                     status = 6
 	defaultModuleDir                 = "/lib/modules"
 	envDisableWireGuardKernel        = "NB_WG_KERNEL_DISABLED"
+	wireGuardModuleName              = "wireguard"
+	amneziaWGModuleName              = "amneziawg"
 )
 
 type module struct {
@@ -95,7 +97,7 @@ func WireGuardModuleIsLoaded() bool {
 		return true
 	}
 
-	loaded, err := tryToLoadModule("wireguard")
+	loaded, err := tryToLoadModule(wireGuardModuleName)
 	if err != nil {
 		log.Info(err)
 		return false
@@ -104,8 +106,36 @@ func WireGuardModuleIsLoaded() bool {
 	return loaded
 }
 
+// AmneziaWGModuleIsLoaded checks whether the Linux amneziawg link kind is
+// available, loading the module when necessary.
+func AmneziaWGModuleIsLoaded() bool {
+	if os.Getenv(envDisableWireGuardKernel) == "true" {
+		log.Debugf(
+			"AmneziaWG kernel module disabled because %s is true",
+			envDisableWireGuardKernel,
+		)
+		return false
+	}
+	if canCreateFakeAWGInterface() {
+		return true
+	}
+	loaded, err := tryToLoadModule(amneziaWGModuleName)
+	if err != nil {
+		log.Info(err)
+		return false
+	}
+	return loaded && canCreateFakeAWGInterface()
+}
+
 func canCreateFakeWireGuardInterface() bool {
-	link := newWGLink("mustnotexist")
+	return canCreateFakeKernelInterface(newWGLink("mustnotexist"))
+}
+
+func canCreateFakeAWGInterface() bool {
+	return canCreateFakeKernelInterface(newAWGLink("mustnotexist"))
+}
+
+func canCreateFakeKernelInterface(link *wgLink) bool {
 
 	// We willingly try to create a device with an invalid
 	// MTU here as the validation of the MTU will be performed after
