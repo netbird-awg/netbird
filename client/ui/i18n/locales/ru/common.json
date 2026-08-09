@@ -1,6 +1,6 @@
 {
     "tray.tooltip": {
-        "message": "Netibird-AWG"
+        "message": "NetBird-AWG"
     },
     "tray.status.disconnected": {
         "message": "Отключено"
@@ -51,7 +51,7 @@
         "message": "{count} дней"
     },
     "tray.menu.open": {
-        "message": "Открыть Netibird-AWG"
+        "message": "Открыть NetBird-AWG"
     },
     "tray.menu.connect": {
         "message": "Подключиться"
@@ -105,19 +105,19 @@
         "message": "—"
     },
     "tray.menu.quit": {
-        "message": "Выйти из Netibird-AWG"
+        "message": "Выйти из NetBird-AWG"
     },
     "notify.daemonOutdated.title": {
-        "message": "Служба Netibird-AWG устарела"
+        "message": "Служба NetBird-AWG устарела"
     },
     "notify.daemonOutdated.body": {
-        "message": "Обновите службу Netibird-AWG, чтобы использовать это приложение."
+        "message": "Обновите службу NetBird-AWG, чтобы использовать это приложение."
     },
     "notify.update.title": {
-        "message": "Доступно обновление Netibird-AWG"
+        "message": "Доступно обновление NetBird-AWG"
     },
     "notify.update.body": {
-        "message": "Доступна версия Netibird-AWG {version}."
+        "message": "Доступна версия NetBird-AWG {version}."
     },
     "notify.update.enforcedSuffix": {
         "message": " Ваш администратор требует установить это обновление."
@@ -138,19 +138,19 @@
         "message": "Не удалось обновить выходной узел {name}"
     },
     "notify.sessionExpired.title": {
-        "message": "Сеанс Netibird-AWG истёк"
+        "message": "Сеанс NetBird-AWG истёк"
     },
     "notify.sessionExpired.body": {
-        "message": "Сеанс Netibird-AWG истёк. Пожалуйста, войдите снова."
+        "message": "Сеанс NetBird-AWG истёк. Пожалуйста, войдите снова."
     },
     "notify.sessionWarning.title": {
         "message": "Сеанс скоро истечёт"
     },
     "notify.sessionWarning.body": {
-        "message": "Сеанс Netibird-AWG истекает через {remaining}. Нажмите «Продлить сейчас», чтобы продлить сеанс."
+        "message": "Сеанс NetBird-AWG истекает через {remaining}. Нажмите «Продлить сейчас», чтобы продлить сеанс."
     },
     "notify.sessionWarning.bodyGeneric": {
-        "message": "Сеанс Netibird-AWG скоро истечёт. Нажмите «Продлить сейчас», чтобы продлить сеанс."
+        "message": "Сеанс NetBird-AWG скоро истечёт. Нажмите «Продлить сейчас», чтобы продлить сеанс."
     },
     "notify.sessionWarning.extend": {
         "message": "Продлить сейчас"
@@ -159,10 +159,10 @@
         "message": "Закрыть"
     },
     "notify.sessionWarning.failed": {
-        "message": "Не удалось продлить сеанс Netibird-AWG"
+        "message": "Не удалось продлить сеанс NetBird-AWG"
     },
     "notify.sessionWarning.successTitle": {
-        "message": "Сеанс Netibird-AWG продлён"
+        "message": "Сеанс NetBird-AWG продлён"
     },
     "notify.sessionWarning.successBody": {
         "message": "Сеанс обновлён."
@@ -174,10 +174,10 @@
         "message": "Сервер передал неверный срок действия сеанса. Пожалуйста, войдите снова."
     },
     "notify.mdm.policyApplied.title": {
-        "message": "Настройки Netibird-AWG обновлены"
+        "message": "Настройки NetBird-AWG обновлены"
     },
     "notify.mdm.policyApplied.body": {
-        "message": "Конфигурация Netibird-AWG была обновлена в соответствии с вашей ИТ-политикой."
+        "message": "Конфигурация NetBird-AWG была обновлена в соответствии с вашей ИТ-политикой."
     },
     "common.cancel": {
         "message": "Отмена"
@@ -225,7 +225,7 @@
         "message": "Загрузка…"
     },
     "common.netbird": {
-        "message": "Netibird-AWG"
+        "message": "NetBird-AWG"
     },
     "common.noResults.title": {
         "message": "Ничего не найдено"
@@ -237,7 +237,7 @@
         "message": "Отключено"
     },
     "notConnected.description": {
-        "message": "Сначала подключитесь к Netibird-AWG, чтобы увидеть подробную информацию о пирах, сетевых ресурсах и выходных узлах."
+        "message": "Сначала подключитесь к NetBird-AWG, чтобы увидеть подробную информацию о пирах, сетевых ресурсах и выходных узлах."
     },
     "connect.status.disconnected": {
         "message": "Отключено"
@@ -351,7 +351,7 @@
         "message": "Введите имя профиля, например работа или дом"
     },
     "profile.dialog.managementHelp": {
-        "message": "Используйте Netibird-AWG Cloud или собственный сервер."
+        "message": "Используйте NetBird-AWG Cloud или собственный сервер."
     },
     "profile.dialog.urlUnreachable": {
         "message": "Не удалось связаться с сервером. Проверьте URL или всё равно добавьте профиль, если уверены, что он правильный."
@@ -375,7 +375,7 @@
         "message": "Сменить профиль"
     },
     "connect.toggle.label": {
-        "message": "Переключить подключение Netibird-AWG"
+        "message": "Переключить подключение NetBird-AWG"
     },
     "connect.localIp.label": {
         "message": "Локальные IP-адреса"
@@ -474,7 +474,7 @@
         "message": "Профили"
     },
     "settings.profiles.intro": {
-        "message": "Управляйте несколькими профилями Netibird-AWG параллельно — например, рабочими и личными учётными записями или разными серверами управления. Ниже можно добавлять профили, отменять их регистрацию и удалять их."
+        "message": "Управляйте несколькими профилями NetBird-AWG параллельно — например, рабочими и личными учётными записями или разными серверами управления. Ниже можно добавлять профили, отменять их регистрацию и удалять их."
     },
     "settings.profiles.addProfile": {
         "message": "Добавить профиль"
@@ -486,7 +486,7 @@
         "message": "Нет профилей"
     },
     "settings.profiles.emptyDescription": {
-        "message": "Создайте профиль, чтобы подключиться к серверу управления Netibird-AWG."
+        "message": "Создайте профиль, чтобы подключиться к серверу управления NetBird-AWG."
     },
     "settings.error.loadTitle": {
         "message": "Не удалось загрузить настройки"
@@ -543,10 +543,10 @@
         "message": "Показывать уведомления о новых обновлениях и событиях подключения."
     },
     "settings.general.autostart.label": {
-        "message": "Запускать интерфейс Netibird-AWG при входе"
+        "message": "Запускать интерфейс NetBird-AWG при входе"
     },
     "settings.general.autostart.help": {
-        "message": "Автоматически запускать интерфейс Netibird-AWG при входе в систему. Это влияет только на графический интерфейс, но не на фоновую службу."
+        "message": "Автоматически запускать интерфейс NetBird-AWG при входе в систему. Это влияет только на графический интерфейс, но не на фоновую службу."
     },
     "settings.general.autostart.errorTitle": {
         "message": "Не удалось изменить автозапуск"
@@ -556,14 +556,14 @@
         "description": "Toggle label: keep the VPN connection up after quitting the UI."
     },
     "settings.general.keepConnectedOnQuit.help": {
-        "message": "Соединение остаётся активным в фоне после закрытия Netibird-AWG. Оно прервётся, только когда вы отключите его сами.",
+        "message": "Соединение остаётся активным в фоне после закрытия NetBird-AWG. Оно прервётся, только когда вы отключите его сами.",
         "description": "Helper text for the stay-connected-after-quitting toggle."
     },
     "settings.general.language.label": {
         "message": "Язык интерфейса"
     },
     "settings.general.language.help": {
-        "message": "Выберите язык интерфейса Netibird-AWG."
+        "message": "Выберите язык интерфейса NetBird-AWG."
     },
     "settings.general.language.search": {
         "message": "Поиск языка…"
@@ -575,7 +575,7 @@
         "message": "Сервер управления"
     },
     "settings.general.management.help": {
-        "message": "Подключайтесь к Netibird-AWG Cloud или к собственному серверу управления. Изменения вызовут переподключение клиента."
+        "message": "Подключайтесь к NetBird-AWG Cloud или к собственному серверу управления. Изменения вызовут переподключение клиента."
     },
     "settings.general.management.cloud": {
         "message": "Cloud"
@@ -593,7 +593,7 @@
         "message": "Не удалось связаться с сервером. Проверьте URL или всё равно сохраните, если уверены, что он правильный."
     },
     "settings.general.management.switchCloudTitle": {
-        "message": "Переключиться на Netibird-AWG Cloud?"
+        "message": "Переключиться на NetBird-AWG Cloud?"
     },
     "settings.general.management.switchCloudMessage": {
         "message": "Это отключит ваш собственный сервер.\nВозможно, потребуется войти снова."
@@ -617,7 +617,7 @@
         "message": "Включить DNS"
     },
     "settings.network.dns.help": {
-        "message": "Применять управляемые Netibird-AWG настройки DNS к системному резолверу."
+        "message": "Применять управляемые NetBird-AWG настройки DNS к системному резолверу."
     },
     "settings.network.clientRoutes.label": {
         "message": "Включить клиентские маршруты"
@@ -635,7 +635,7 @@
         "message": "Включить IPv6"
     },
     "settings.network.ipv6.help": {
-        "message": "Использовать IPv6-адресацию для оверлейной сети Netibird-AWG."
+        "message": "Использовать IPv6-адресацию для оверлейной сети NetBird-AWG."
     },
     "settings.security.section.firewall": {
         "message": "Брандмауэр"
@@ -680,7 +680,7 @@
         "message": "Включить SSH-сервер"
     },
     "settings.ssh.server.help": {
-        "message": "Запускать SSH-сервер Netibird-AWG на этом хосте, чтобы другие пиры могли к нему подключаться."
+        "message": "Запускать SSH-сервер NetBird-AWG на этом хосте, чтобы другие пиры могли к нему подключаться."
     },
     "settings.ssh.root.label": {
         "message": "Разрешить вход под root"
@@ -755,7 +755,7 @@
         "message": "Общий ключ"
     },
     "settings.advanced.psk.help": {
-        "message": "Необязательный PSK WireGuard для дополнительного симметричного шифрования. Это не то же самое, что ключ установки Netibird-AWG. Вы будете обмениваться данными только с пирами, использующими тот же общий ключ."
+        "message": "Необязательный PSK WireGuard для дополнительного симметричного шифрования. Это не то же самое, что ключ установки NetBird-AWG. Вы будете обмениваться данными только с пирами, использующими тот же общий ключ."
     },
     "settings.troubleshooting.section.title": {
         "message": "Отладочный пакет"
@@ -764,7 +764,7 @@
         "message": "Анонимизировать конфиденциальную информацию"
     },
     "settings.troubleshooting.anonymize.help": {
-        "message": "Скрывает публичные IP-адреса и сторонние (не относящиеся к Netibird-AWG) домены в журналах."
+        "message": "Скрывает публичные IP-адреса и сторонние (не относящиеся к NetBird-AWG) домены в журналах."
     },
     "settings.troubleshooting.systemInfo.label": {
         "message": "Включить сведения о системе"
@@ -773,10 +773,10 @@
         "message": "Включить ОС, ядро, сетевые интерфейсы и таблицы маршрутизации."
     },
     "settings.troubleshooting.upload.label": {
-        "message": "Загрузить пакет на серверы Netibird-AWG"
+        "message": "Загрузить пакет на серверы NetBird-AWG"
     },
     "settings.troubleshooting.upload.help": {
-        "message": "Возвращает ключ загрузки, который можно передать поддержке Netibird-AWG."
+        "message": "Возвращает ключ загрузки, который можно передать поддержке NetBird-AWG."
     },
     "settings.troubleshooting.trace.label": {
         "message": "Включить журналы TRACE"
@@ -821,7 +821,7 @@
         "message": "Пакет сохранён"
     },
     "settings.troubleshooting.done.uploadedDescription": {
-        "message": "Поделитесь ключом загрузки ниже с <docs>поддержкой Netibird-AWG</docs>. Локальная копия также сохранена на вашем устройстве."
+        "message": "Поделитесь ключом загрузки ниже с <docs>поддержкой NetBird-AWG</docs>. Локальная копия также сохранена на вашем устройстве."
     },
     "settings.troubleshooting.done.savedDescription": {
         "message": "Отладочный пакет сохранён локально."
@@ -842,7 +842,7 @@
         "message": "Не удалось загрузить. Пакет всё равно сохранён локально."
     },
     "settings.troubleshooting.stage.reconnecting": {
-        "message": "Переподключение Netibird-AWG…"
+        "message": "Переподключение NetBird-AWG…"
     },
     "settings.troubleshooting.stage.capturing": {
         "message": "Сбор отладочных журналов"
@@ -851,16 +851,16 @@
         "message": "Создание отладочного пакета…"
     },
     "settings.troubleshooting.stage.uploading": {
-        "message": "Загрузка в Netibird-AWG…"
+        "message": "Загрузка в NetBird-AWG…"
     },
     "settings.troubleshooting.stage.cancelling": {
         "message": "Отмена…"
     },
     "settings.about.client": {
-        "message": "Клиент Netibird-AWG v{version}"
+        "message": "Клиент NetBird-AWG v{version}"
     },
     "settings.about.clientName": {
-        "message": "Клиент Netibird-AWG"
+        "message": "Клиент NetBird-AWG"
     },
     "settings.about.development": {
         "message": "[Разработка]"
@@ -872,7 +872,7 @@
         "message": "GUI"
     },
     "settings.about.copyright": {
-        "message": "© {year} Netibird-AWG. Все права защищены."
+        "message": "© {year} NetBird-AWG. Все права защищены."
     },
     "settings.about.links.imprint": {
         "message": "Правовая информация"
@@ -902,7 +902,7 @@
         "message": "Обратная связь"
     },
     "update.banner.message": {
-        "message": "Netibird-AWG {version} готов к установке."
+        "message": "NetBird-AWG {version} готов к установке."
     },
     "update.banner.later": {
         "message": "Позже"
@@ -926,7 +926,7 @@
         "message": "Загрузить"
     },
     "update.card.autoCheckInterval": {
-        "message": "Netibird-AWG проверяет обновления в фоновом режиме."
+        "message": "NetBird-AWG проверяет обновления в фоновом режиме."
     },
     "update.card.changelog": {
         "message": "Список изменений"
@@ -938,13 +938,13 @@
         "message": "Доступно обновление"
     },
     "update.overlay.updatingVersion": {
-        "message": "Обновление Netibird-AWG до v{version}"
+        "message": "Обновление NetBird-AWG до v{version}"
     },
     "update.overlay.updating": {
-        "message": "Обновление Netibird-AWG"
+        "message": "Обновление NetBird-AWG"
     },
     "update.overlay.description": {
-        "message": "Доступна более новая версия, идёт её установка. Netibird-AWG автоматически перезапустится после завершения обновления."
+        "message": "Доступна более новая версия, идёт её установка. NetBird-AWG автоматически перезапустится после завершения обновления."
     },
     "update.overlay.error.timeoutTitle": {
         "message": "Обновление занимает слишком много времени"
@@ -1034,22 +1034,22 @@
         "message": "Обновление"
     },
     "window.title.welcome": {
-        "message": "Добро пожаловать в Netibird-AWG"
+        "message": "Добро пожаловать в NetBird-AWG"
     },
     "window.title.error": {
         "message": "Ошибка"
     },
     "welcome.title": {
-        "message": "Найдите Netibird-AWG в системном трее"
+        "message": "Найдите NetBird-AWG в системном трее"
     },
     "welcome.titleMac": {
-        "message": "Найдите Netibird-AWG в строке меню"
+        "message": "Найдите NetBird-AWG в строке меню"
     },
     "welcome.description": {
-        "message": "Netibird-AWG находится в системном трее. Нажмите на значок, чтобы подключиться, переключить профиль или открыть настройки."
+        "message": "NetBird-AWG находится в системном трее. Нажмите на значок, чтобы подключиться, переключить профиль или открыть настройки."
     },
     "welcome.descriptionMac": {
-        "message": "Netibird-AWG находится в строке меню. Нажмите на значок, чтобы подключиться, переключить профиль или открыть настройки."
+        "message": "NetBird-AWG находится в строке меню. Нажмите на значок, чтобы подключиться, переключить профиль или открыть настройки."
     },
     "welcome.continue": {
         "message": "Продолжить"
@@ -1058,13 +1058,13 @@
         "message": "Назад"
     },
     "welcome.management.title": {
-        "message": "Настройка Netibird-AWG"
+        "message": "Настройка NetBird-AWG"
     },
     "welcome.management.description": {
-        "message": "Нажмите «Продолжить», чтобы начать, или выберите «Собственный сервер», если у вас есть свой сервер Netibird-AWG."
+        "message": "Нажмите «Продолжить», чтобы начать, или выберите «Собственный сервер», если у вас есть свой сервер NetBird-AWG."
     },
     "welcome.management.cloud.title": {
-        "message": "Netibird-AWG Cloud"
+        "message": "NetBird-AWG Cloud"
     },
     "welcome.management.cloud.description": {
         "message": "Используйте наш облачный сервис. Настройка не требуется."
@@ -1160,10 +1160,10 @@
         "message": "Домен"
     },
     "peers.details.netbirdIp": {
-        "message": "Netibird-AWG IP"
+        "message": "NetBird-AWG IP"
     },
     "peers.details.netbirdIpv6": {
-        "message": "Netibird-AWG IPv6"
+        "message": "NetBird-AWG IPv6"
     },
     "peers.details.publicKey": {
         "message": "Открытый ключ"
@@ -1298,7 +1298,7 @@
         "message": "Отключиться"
     },
     "daemon.unavailable.title": {
-        "message": "Служба Netibird-AWG не запущена"
+        "message": "Служба NetBird-AWG не запущена"
     },
     "daemon.unavailable.description": {
         "message": "Приложение автоматически переподключится, как только служба будет запущена."
@@ -1307,7 +1307,7 @@
         "message": "Документация"
     },
     "daemon.outdated.title": {
-        "message": "Клиент Netibird-AWG устарел"
+        "message": "Клиент NetBird-AWG устарел"
     },
     "daemon.outdated.description": {
         "message": "Новый GUI несовместим с вашим более старым клиентом. Обновите клиент, чтобы использовать новое приложение."
@@ -1334,7 +1334,7 @@
         "message": "Сервер отклонил вход."
     },
     "error.daemon_unreachable": {
-        "message": "Демон Netibird-AWG не отвечает. Проверьте, запущена ли служба."
+        "message": "Демон NetBird-AWG не отвечает. Проверьте, запущена ли служба."
     },
     "error.unknown": {
         "message": "Не удалось выполнить операцию."

@@ -1,5 +1,5 @@
 [Unit]
-Description=Netibird-AWG Client (%i)
+Description=NetBird-AWG Client (%i)
 Documentation=https://netbird.io/docs
 After=network-online.target syslog.target NetworkManager.service
 Wants=network-online.target

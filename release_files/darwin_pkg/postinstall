@@ -2,7 +2,7 @@
 
 set -x
 
-APP=/Applications/Netibird-AWG.app
+APP=/Applications/NetBird-AWG.app
 AGENT=/usr/local/bin/netibird-awg
 LOG_FILE=/var/log/netbird/client_post_install.log
 
@@ -10,20 +10,20 @@ mkdir -p /var/log/netbird/
 mkdir -p /usr/local/bin/
 
 {
-    echo "Installing Netibird-AWG..."
+    echo "Installing NetBird-AWG..."
 
     if test -d "$APP"; then
-        echo "Netibird-AWG app copied successfully."
+        echo "NetBird-AWG app copied successfully."
     else
-        echo "Netibird-AWG app could not be copied to the Applications folder."
+        echo "NetBird-AWG app could not be copied to the Applications folder."
         exit 1
     fi
 
     ln -fs "$APP/Contents/MacOS/netibird-awg" "$AGENT"
     if test -f "$AGENT"; then
-        echo "Netibird-AWG binary linked successfully."
+        echo "NetBird-AWG binary linked successfully."
     else
-        echo "Netibird-AWG could not create symlink in /usr/local/bin"
+        echo "NetBird-AWG could not create symlink in /usr/local/bin"
         exit 1
     fi
 
@@ -40,14 +40,14 @@ mkdir -p /usr/local/bin/
             if [ -z "$uid" ]; then
                 echo "Could not resolve uid for console user '$console_user'; skipping UI launch."
             else
-                echo "Launching Netibird-AWG UI as console user $console_user (uid $uid)."
+                echo "Launching NetBird-AWG UI as console user $console_user (uid $uid)."
                 if ! launchctl asuser "$uid" sudo -u "$console_user" -H open "$APP"; then
-                    echo "Failed to launch Netibird-AWG UI; it can be opened later."
+                    echo "Failed to launch NetBird-AWG UI; it can be opened later."
                 fi
             fi
             ;;
     esac
 
-    echo "Finished Netibird-AWG installation successfully"
+    echo "Finished NetBird-AWG installation successfully"
     exit 0 # all good
 } > "$LOG_FILE" 2>&1

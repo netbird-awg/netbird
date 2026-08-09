@@ -35,7 +35,7 @@ var (
 
 var exposeCmd = &cobra.Command{
 	Use:   "expose <port>",
-	Short: "Expose a local port via the Netibird-AWG reverse proxy",
+	Short: "Expose a local port via the NetBird-AWG reverse proxy",
 	Args:  cobra.ExactArgs(1),
 	Example: `  netibird-awg expose --with-password safe-pass 8080
   netibird-awg expose --protocol tcp 5432
