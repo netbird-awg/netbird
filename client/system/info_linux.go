@@ -64,6 +64,7 @@ func GetInfo(ctx context.Context) *Info {
 		SystemProductName:  si.SystemProductName,
 		SystemManufacturer: si.SystemManufacturer,
 		Environment:        si.Environment,
+		KernelAWGAvailable: kernelAWGAvailable(),
 	}
 
 	return gio
