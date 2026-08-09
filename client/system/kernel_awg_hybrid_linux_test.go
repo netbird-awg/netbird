@@ -45,3 +45,22 @@ func TestKernelAWGProbeCacheCanBeInvalidated(t *testing.T) {
 	assert.True(t, cache.isAvailable(), "probe should recover after invalidation")
 	assert.Equal(t, 2, calls, "invalidated probe should run again")
 }
+
+func TestKernelAWGProbeCacheCanBeMarkedUnavailable(t *testing.T) {
+	calls := 0
+	cache := newKernelAWGProbeCache(func() error {
+		calls++
+		return nil
+	})
+
+	assert.True(t, cache.isAvailable(), "successful probe should be available")
+	cache.markUnavailable()
+	assert.False(t, cache.isAvailable(), "rejected backend should stay unavailable")
+	assert.Equal(t, 1, calls, "rejected backend should not be probed again")
+}
+
+func TestKernelAWGUnavailableInNetstackMode(t *testing.T) {
+	t.Setenv("NB_USE_NETSTACK_MODE", "true")
+
+	assert.False(t, kernelAWGAvailable(), "netstack must not advertise kernel AWG")
+}

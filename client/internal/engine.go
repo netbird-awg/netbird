@@ -584,6 +584,7 @@ func (e *Engine) Start(netbirdConfig *mgmProto.NetbirdConfig, mgmtURL *url.URL) 
 
 	wgIface, err := e.newWgIface()
 	if err != nil {
+		e.rejectKernelAWG()
 		log.Errorf("failed creating wireguard interface instance %s: [%s]", e.config.WgIfaceName, err)
 		return fmt.Errorf("new wg interface: %w", err)
 	}
@@ -644,13 +645,16 @@ func (e *Engine) Start(netbirdConfig *mgmProto.NetbirdConfig, mgmtURL *url.URL) 
 	e.dnsServer.SetRouteSources(e.routeManager.GetSelectedClientRoutes, e.routeManager.GetActiveClientRoutes)
 
 	if err = e.wgInterfaceCreate(); err != nil {
+		e.rejectKernelAWG()
 		log.Errorf("failed creating tunnel interface %s: [%s]", e.config.WgIfaceName, err.Error())
 		return fmt.Errorf("create wg interface: %w", err)
 	}
 	if e.config.TunnelProfile != nil {
 		if err := wgIface.ConfigureTunnelProfile(e.config.TunnelProfile); err != nil {
+			e.rejectKernelAWG()
 			return fmt.Errorf("configure tunnel profile: %w", err)
 		}
+		e.markKernelAWGRuntimeReady()
 	}
 
 	if filteredDevice := e.wgInterface.GetDevice(); filteredDevice != nil {
@@ -2496,6 +2500,7 @@ func (e *Engine) configurePeerTunnelState(
 		state.mode,
 		state.profileRevision,
 	); err != nil {
+		e.rejectKernelAWG()
 		return fmt.Errorf("configure peer tunnel mode: %w", err)
 	}
 	return nil
@@ -2736,6 +2741,7 @@ func (e *Engine) newWgIface() (*iface.WGIface, error) {
 		log.Errorf("failed to create pion's stdnet: %s", err)
 	}
 
+	useKernelAWG := shouldUseKernelAWG(e.config.TunnelProfile)
 	opts := iface.WGIFaceOpts{
 		IFaceName:      e.config.WgIfaceName,
 		Address:        e.config.WgAddr,
@@ -2744,7 +2750,8 @@ func (e *Engine) newWgIface() (*iface.WGIface, error) {
 		MTU:            e.config.MTU,
 		TransportNet:   transportNet,
 		DisableDNS:     e.config.DisableDNS,
-		ForceUserspace: e.config.TunnelProfile != nil,
+		ForceUserspace: e.config.TunnelProfile != nil && !useKernelAWG,
+		UseAWGKernel:   useKernelAWG,
 	}
 
 	switch runtime.GOOS {
@@ -2760,6 +2767,24 @@ func (e *Engine) newWgIface() (*iface.WGIface, error) {
 	}
 
 	return iface.NewWGIFace(opts)
+}
+
+func (e *Engine) rejectKernelAWG() {
+	if shouldUseKernelAWG(e.config.TunnelProfile) {
+		markKernelAWGUnavailable()
+		if e.config.TunnelRuntime != nil {
+			e.config.TunnelRuntime.Ready = false
+		}
+	}
+}
+
+func (e *Engine) markKernelAWGRuntimeReady() {
+	if !shouldUseKernelAWG(e.config.TunnelProfile) ||
+		e.config.TunnelRuntime == nil {
+		return
+	}
+	e.config.TunnelRuntime.Ready = true
+	e.config.TunnelRuntime.ErrorCode = ""
 }
 
 func (e *Engine) wgInterfaceCreate() (err error) {

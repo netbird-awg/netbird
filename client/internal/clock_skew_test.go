@@ -151,6 +151,7 @@ func TestEffectiveAtUsesSignedClockSkew(t *testing.T) {
 }
 
 func TestHardTunnelProfileFailureReportsAndRecovers(t *testing.T) {
+	t.Setenv("NB_USE_NETSTACK_MODE", "false")
 	now := time.Date(2026, time.August, 8, 12, 0, 0, 0, time.UTC)
 	var reports []*system.Info
 	engine := &Engine{
@@ -213,7 +214,8 @@ func TestHardTunnelProfileFailureReportsAndRecovers(t *testing.T) {
 	}
 	info := &system.Info{}
 	(&Engine{config: loaded}).applyInfoFlags(info)
-	if info.TunnelRuntime == nil || !info.TunnelRuntime.Ready ||
+	wantReady := !shouldUseKernelAWG(loaded.TunnelProfile)
+	if info.TunnelRuntime == nil || info.TunnelRuntime.Ready != wantReady ||
 		info.TunnelRuntime.ProfileRevision != 5 || info.TunnelRuntime.ErrorCode != "" {
 		t.Fatalf("new engine loaded runtime = %+v", info.TunnelRuntime)
 	}

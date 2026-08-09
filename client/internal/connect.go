@@ -629,6 +629,7 @@ func createEngineConfigAt(
 			log.Warnf("rejecting assigned tunnel profile: %v", profileErr)
 		}
 	}
+	prepareKernelAWGRuntime(tunnelProfile, tunnelRuntime)
 
 	engineConf := &EngineConfig{
 		WgIfaceName:                   config.WgIface,
