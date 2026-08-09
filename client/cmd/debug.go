@@ -37,7 +37,7 @@ var (
 var debugCmd = &cobra.Command{
 	Use:   "debug",
 	Short: "Debugging commands",
-	Long:  "Commands for debugging and logging within the Netibird-AWG daemon.",
+	Long:  "Commands for debugging and logging within the NetBird-AWG daemon.",
 }
 
 var debugBundleCmd = &cobra.Command{
@@ -50,8 +50,8 @@ var debugBundleCmd = &cobra.Command{
 
 var logCmd = &cobra.Command{
 	Use:   "log",
-	Short: "Manage logging for the Netibird-AWG daemon",
-	Long:  `Commands to manage logging settings for the Netibird-AWG daemon, including ICE, gRPC, and general log levels.`,
+	Short: "Manage logging for the NetBird-AWG daemon",
+	Long:  `Commands to manage logging settings for the NetBird-AWG daemon, including ICE, gRPC, and general log levels.`,
 }
 
 var logLevelCmd = &cobra.Command{

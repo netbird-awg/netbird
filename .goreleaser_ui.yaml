@@ -77,11 +77,11 @@ archives:
       - netibird-awg-ui-windows-arm64
 
 nfpms:
-  - maintainer: Netibird-AWG <dev@netbird.io>
-    description: Netibird-AWG client UI.
+  - maintainer: NetBird-AWG <dev@netbird.io>
+    description: NetBird-AWG client UI.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: Netibird-AWG
+    vendor: NetBird-AWG
     id: netibird_awg_ui_deb
     package_name: netibird-awg-ui
     builds:
@@ -100,11 +100,11 @@ nfpms:
       - libgtk-4-1 (>= 4.14)
       - libwebkitgtk-6.0-4
 
-  - maintainer: Netibird-AWG <dev@netbird.io>
-    description: Netibird-AWG client UI.
+  - maintainer: NetBird-AWG <dev@netbird.io>
+    description: NetBird-AWG client UI.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: Netibird-AWG
+    vendor: NetBird-AWG
     id: netibird_awg_ui_rpm
     package_name: netibird-awg-ui
     builds:

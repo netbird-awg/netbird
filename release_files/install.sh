@@ -55,7 +55,7 @@ get_release() {
         cut -d '"' -f 4)
     if ! printf '%s\n' "${TAG_NAME}" |
         grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
-        echo "No valid Netibird-AWG release was found" >&2
+        echo "No valid NetBird-AWG release was found" >&2
         return 1
     fi
     printf '%s\n' "${TAG_NAME}"
@@ -198,16 +198,16 @@ install_netbird() {
       status_output="$(netibird-awg status 2>&1 || true)"
 
       if echo "$status_output" | grep -q 'failed to connect to daemon error: context deadline exceeded'; then
-          echo "Warning: could not reach Netibird-AWG daemon (timeout), proceeding anyway"
+          echo "Warning: could not reach NetBird-AWG daemon (timeout), proceeding anyway"
       else
           if echo "$status_output" | grep -q 'Management: Connected' && \
               echo "$status_output" | grep -q 'Signal: Connected'; then
-              echo "Netibird-AWG service is running, please stop it before proceeding"
+              echo "NetBird-AWG service is running, please stop it before proceeding"
               exit 1
           fi
 
           if [ -n "$status_output" ]; then
-              echo "Netibird-AWG seems to be installed already, please remove it before proceeding"
+              echo "NetBird-AWG seems to be installed already, please remove it before proceeding"
               exit 1
           fi
       fi
@@ -308,15 +308,15 @@ install_netbird() {
     # Load and start netbird service
     if [ "$PACKAGE_MANAGER" != "rpm-ostree" ] && [ "$PACKAGE_MANAGER" != "pkg" ]; then
         if ! ${SUDO} netibird-awg service install 2>&1; then
-            echo "Netibird-AWG service has already been loaded"
+            echo "NetBird-AWG service has already been loaded"
         fi
         if ! ${SUDO} netibird-awg service start 2>&1; then
-            echo "Netibird-AWG service has already been started"
+            echo "NetBird-AWG service has already been started"
         fi
     fi
 
 
-    echo "Installation has been finished. To connect, run Netibird-AWG with:"
+    echo "Installation has been finished. To connect, run NetBird-AWG with:"
     echo ""
     echo "netibird-awg up"
 }
@@ -336,7 +336,7 @@ is_bin_package_manager() {
 stop_running_netbird_ui() {
   NB_UI_PROC=$(pgrep -f '(^|/)netibird-awg-ui([[:space:]]|$)' || true)
   if [ -n "$NB_UI_PROC" ]; then
-    echo "Netibird-AWG UI is running with PID $NB_UI_PROC. Stopping it..."
+    echo "NetBird-AWG UI is running with PID $NB_UI_PROC. Stopping it..."
     kill -9 "$NB_UI_PROC"
   fi
 }
@@ -348,14 +348,14 @@ update_netbird() {
     installed_version=$(netibird-awg version)
 
     if [ "$latest_version" = "$installed_version" ]; then
-      echo "Installed Netibird-AWG version ($installed_version) is up-to-date"
+      echo "Installed NetBird-AWG version ($installed_version) is up-to-date"
       exit 0
     fi
 
     if version_greater_equal "$latest_version" "$installed_version"; then
-      echo "Netibird-AWG new version ($latest_version) available. Updating..."
+      echo "NetBird-AWG new version ($latest_version) available. Updating..."
       echo ""
-      echo "Initiating Netibird-AWG update. This will restart the netibird-awg service"
+      echo "Initiating NetBird-AWG update. This will restart the netibird-awg service"
 
       ${SUDO} netibird-awg service stop || true
       ${SUDO} netibird-awg service uninstall || true
@@ -366,7 +366,7 @@ update_netbird() {
       ${SUDO} netibird-awg service start
     fi
   else
-     echo "Netibird-AWG installation was done using a package manager. Please use your system's package manager to update"
+     echo "NetBird-AWG installation was done using a package manager. Please use your system's package manager to update"
   fi
 }
 
@@ -376,7 +376,7 @@ if [ -z "$SKIP_UI_APP" ]; then
 else
     if $SKIP_UI_APP; then
       echo "SKIP_UI_APP has been set to true in the environment"
-      echo "Netibird-AWG UI installation will be omitted based on your preference"
+      echo "NetBird-AWG UI installation will be omitted based on your preference"
     fi
 fi
 
@@ -400,13 +400,13 @@ if type uname >/dev/null 2>&1; then
               if [ "$ARCH" != "amd64" ] && [ "$ARCH" != "arm64" ] \
                   && [ "$ARCH" != "x86_64" ];then
                   SKIP_UI_APP=true
-                  echo "Netibird-AWG UI installation will be omitted as $ARCH is not a compatible architecture"
+                  echo "NetBird-AWG UI installation will be omitted as $ARCH is not a compatible architecture"
               fi
 
               # Allow netbird UI installation for linux running desktop environment
               if [ -z "$XDG_CURRENT_DESKTOP" ];then
                   SKIP_UI_APP=true
-                  echo "Netibird-AWG UI installation will be omitted as Linux does not run desktop environment"
+                  echo "NetBird-AWG UI installation will be omitted as Linux does not run desktop environment"
               fi
 
               # Check the availability of a compatible package manager

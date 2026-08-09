@@ -167,7 +167,7 @@ func (m *Manager) buildSSHConfig(peers []PeerSSHInfo) (string, error) {
 }
 
 func (m *Manager) buildConfigHeader() string {
-	return "# Netibird-AWG SSH client configuration\n" +
+	return "# NetBird-AWG SSH client configuration\n" +
 		"# Generated automatically - do not edit manually\n" +
 		"#\n" +
 		"# To disable SSH config management, use:\n" +

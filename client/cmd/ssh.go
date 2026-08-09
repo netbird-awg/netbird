@@ -94,8 +94,8 @@ func init() {
 
 var sshCmd = &cobra.Command{
 	Use:   "ssh [flags] [user@]host [command]",
-	Short: "Connect to a Netibird-AWG peer via SSH",
-	Long: `Connect to a Netibird-AWG peer using SSH with support for port forwarding.
+	Short: "Connect to a NetBird-AWG peer via SSH",
+	Long: `Connect to a NetBird-AWG peer using SSH with support for port forwarding.
 
 Port Forwarding:
   -L [bind_address:]port:host:hostport   Local port forwarding
@@ -850,8 +850,8 @@ func sshProxyFn(cmd *cobra.Command, args []string) error {
 
 var sshDetectCmd = &cobra.Command{
 	Use:    "detect <host> <port>",
-	Short:  "Detect if a host is running Netibird-AWG SSH",
-	Long:   "Internal command used by SSH Match exec to detect Netibird-AWG SSH servers. Exit codes: 0=JWT, 1=no-JWT, 2=regular SSH",
+	Short:  "Detect if a host is running NetBird-AWG SSH",
+	Long:   "Internal command used by SSH Match exec to detect NetBird-AWG SSH servers. Exit codes: 0=JWT, 1=no-JWT, 2=regular SSH",
 	Hidden: true,
 	Args:   cobra.ExactArgs(2),
 	RunE:   sshDetectFn,

@@ -11,7 +11,7 @@
     !define INFO_COMPANYNAME "NetBird GmbH"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "Netibird-AWG"
+    !define INFO_PRODUCTNAME "NetBird-AWG"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "0.0.1"
