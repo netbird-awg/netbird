@@ -208,6 +208,11 @@ type Engine struct {
 	config    *EngineConfig
 	mobileDep MobileDependency
 
+	tunnelRuntimeMetaMu        sync.Mutex
+	tunnelRuntimeMetaPublished *system.TunnelRuntimeInfo
+	tunnelRuntimeMetaHasValue  bool
+	tunnelRuntimeMetaDone      chan struct{}
+
 	// STUNs is a list of STUN servers used by ICE
 	STUNs []*stun.URI
 	// TURNs is a list of STUN servers used by ICE
@@ -1303,8 +1308,8 @@ func (e *Engine) applyInfoFlags(info *system.Info) {
 		e.config.DisableSSHAuth,
 	)
 	if runtime := e.config.TunnelRuntime; runtime != nil {
-		copy := *runtime
-		info.TunnelRuntime = &copy
+		runtimeCopy := *runtime
+		info.TunnelRuntime = &runtimeCopy
 	} else if profile := e.config.TunnelProfile; profile != nil {
 		info.TunnelRuntime = tunnelRuntimeForProfile(profile)
 	}
@@ -1426,9 +1431,12 @@ func (e *Engine) updateTunnelProfileAt(
 				nextRuntime,
 			)
 			current.EstimatedClockSkewMS = next.EstimatedClockSkewMS
-			e.config.TunnelRuntime = nextRuntime
 			if recovered {
-				e.syncTunnelRuntimeMeta()
+				if e.publishTunnelRuntimeMeta(nextRuntime) {
+					e.config.TunnelRuntime = nextRuntime
+				}
+			} else {
+				e.config.TunnelRuntime = nextRuntime
 			}
 		}
 		return nil
@@ -1474,12 +1482,10 @@ func tunnelRuntimeRecovered(current, next *system.TunnelRuntimeInfo) bool {
 }
 
 func (e *Engine) publishTunnelRuntime(next *system.TunnelRuntimeInfo) {
-	current := e.config.TunnelRuntime
-	if current != nil && next != nil && *current == *next {
-		return
-	}
+	e.tunnelRuntimeMetaMu.Lock()
 	e.config.TunnelRuntime = next
-	e.syncTunnelRuntimeMeta()
+	e.tunnelRuntimeMetaMu.Unlock()
+	e.publishTunnelRuntimeMeta(next)
 }
 
 func (e *Engine) warnTunnelClockSkew(result tunnelProfileDecodeResult) {
@@ -1501,9 +1507,55 @@ func (e *Engine) warnTunnelClockSkew(result tunnelProfileDecodeResult) {
 	)
 }
 
-func (e *Engine) syncTunnelRuntimeMeta() {
+func (e *Engine) publishTunnelRuntimeMeta(runtime *system.TunnelRuntimeInfo) bool {
+	for {
+		e.tunnelRuntimeMetaMu.Lock()
+		if e.tunnelRuntimeMetaHasValue &&
+			tunnelRuntimeMetaEqual(e.tunnelRuntimeMetaPublished, runtime) {
+			e.tunnelRuntimeMetaMu.Unlock()
+			return true
+		}
+		if done := e.tunnelRuntimeMetaDone; done != nil {
+			e.tunnelRuntimeMetaMu.Unlock()
+			<-done
+			continue
+		}
+		done := make(chan struct{})
+		e.tunnelRuntimeMetaDone = done
+		e.tunnelRuntimeMetaMu.Unlock()
+
+		synced := e.syncTunnelRuntimeMeta(runtime)
+
+		e.tunnelRuntimeMetaMu.Lock()
+		if synced {
+			e.tunnelRuntimeMetaPublished = cloneTunnelRuntimeMeta(runtime)
+			e.tunnelRuntimeMetaHasValue = true
+		}
+		e.tunnelRuntimeMetaDone = nil
+		close(done)
+		e.tunnelRuntimeMetaMu.Unlock()
+		return synced
+	}
+}
+
+func tunnelRuntimeMetaEqual(first, second *system.TunnelRuntimeInfo) bool {
+	if first == nil || second == nil {
+		return first == second
+	}
+	return *first == *second
+}
+
+func cloneTunnelRuntimeMeta(runtime *system.TunnelRuntimeInfo) *system.TunnelRuntimeInfo {
+	if runtime == nil {
+		return nil
+	}
+	runtimeCopy := *runtime
+	return &runtimeCopy
+}
+
+func (e *Engine) syncTunnelRuntimeMeta(runtime *system.TunnelRuntimeInfo) bool {
 	if e.mgmClient == nil {
-		return
+		return false
 	}
 	info, ok := system.GetInfoWithChecksTimeout(
 		e.ctx,
@@ -1512,12 +1564,17 @@ func (e *Engine) syncTunnelRuntimeMeta() {
 		e.overlayAddresses()...,
 	)
 	if !ok {
-		return
+		return false
 	}
+	e.tunnelRuntimeMetaMu.Lock()
 	e.applyInfoFlags(info)
+	e.tunnelRuntimeMetaMu.Unlock()
+	info.TunnelRuntime = cloneTunnelRuntimeMeta(runtime)
 	if err := e.mgmClient.SyncMeta(info); err != nil {
-		log.Warnf("sync rejected tunnel runtime metadata: %v", err)
+		log.Warn("sync rejected tunnel runtime metadata")
+		return false
 	}
+	return true
 }
 
 // hasIPv6Changed reports whether the IPv6 overlay address in the peer config

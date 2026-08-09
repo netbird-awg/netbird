@@ -1,12 +1,16 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -347,8 +351,8 @@ func TestEqualSameIdentityHardSkewReportsAndRecovers(t *testing.T) {
 			if info.TunnelRuntime == nil {
 				t.Fatal("runtime report is missing")
 			}
-			copy := *info.TunnelRuntime
-			reports = append(reports, &copy)
+			reportCopy := *info.TunnelRuntime
+			reports = append(reports, &reportCopy)
 			return nil
 		}},
 	}
@@ -379,6 +383,113 @@ func TestEqualSameIdentityHardSkewReportsAndRecovers(t *testing.T) {
 	}
 	if len(reports) != 2 || !reports[1].Ready || reports[1].ErrorCode != "" {
 		t.Fatalf("recovery reports = %+v", reports)
+	}
+}
+
+func TestTunnelRuntimeMetaRetriesAfterSyncFailure(t *testing.T) {
+	var output bytes.Buffer
+	originalOutput := log.StandardLogger().Out
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(originalOutput) })
+
+	attempts := 0
+	reports := make([]*system.TunnelRuntimeInfo, 0, 2)
+	engine := &Engine{
+		ctx:    context.Background(),
+		config: &EngineConfig{TunnelProfile: testTunnelProfile()},
+		mgmClient: &mgm.MockClient{SyncMetaFunc: func(info *system.Info) error {
+			attempts++
+			if info.TunnelRuntime == nil {
+				t.Fatal("runtime report is missing")
+			}
+			reportCopy := *info.TunnelRuntime
+			reports = append(reports, &reportCopy)
+			if attempts == 1 {
+				return errors.New("secret-runtime-token")
+			}
+			return nil
+		}},
+	}
+	runtime := &system.TunnelRuntimeInfo{
+		ProtocolVersion: tunnel.ProtocolAmneziaWG3,
+		ProfileRevision: 5,
+		AdapterRevision: tunnel.AdapterRevision,
+		Ready:           false,
+		ErrorCode:       sharedtypes.TunnelRuntimeErrorClockSkew,
+	}
+
+	engine.publishTunnelRuntime(runtime)
+	if engine.tunnelRuntimeReady() {
+		t.Fatal("failed runtime report did not keep the tunnel fail-closed")
+	}
+	var retryGroup sync.WaitGroup
+	for range 2 {
+		retryGroup.Add(1)
+		go func() {
+			defer retryGroup.Done()
+			engine.publishTunnelRuntime(runtime)
+		}()
+	}
+	retryGroup.Wait()
+	engine.publishTunnelRuntime(runtime)
+
+	if attempts != 2 {
+		t.Fatalf("SyncMeta attempts = %d, want one retry and one deduped repeat", attempts)
+	}
+	if len(reports) != 2 || *reports[0] != *runtime || *reports[1] != *runtime {
+		t.Fatalf("runtime reports = %+v, want two identical safe reports", reports)
+	}
+	if strings.Contains(output.String(), "secret-runtime-token") {
+		t.Fatalf("SyncMeta error leaked into logs: %q", output.String())
+	}
+}
+
+func TestTunnelRuntimeRecoveryWaitsForSuccessfulMetaSync(t *testing.T) {
+	now := time.Date(2026, time.August, 8, 12, 0, 0, 0, time.UTC)
+	attempts := 0
+	engine := &Engine{
+		ctx: context.Background(),
+		config: &EngineConfig{
+			TunnelProfile: testTunnelProfile(),
+			TunnelRuntime: &system.TunnelRuntimeInfo{
+				ProtocolVersion: tunnel.ProtocolAmneziaWG2,
+				ProfileRevision: 4,
+				AdapterRevision: tunnel.AdapterRevision,
+				Ready:           false,
+				ErrorCode:       sharedtypes.TunnelRuntimeErrorClockSkew,
+			},
+		},
+		mgmClient: &mgm.MockClient{SyncMetaFunc: func(info *system.Info) error {
+			attempts++
+			if info.TunnelRuntime == nil || !info.TunnelRuntime.Ready {
+				t.Fatalf("recovery report = %+v, want ready runtime", info.TunnelRuntime)
+			}
+			if attempts == 1 {
+				return errors.New("temporary sync failure")
+			}
+			return nil
+		}},
+	}
+	profile := testProtoTunnelProfile(4)
+	profile.ServerTime = timestamppb.New(now)
+
+	if err := engine.updateTunnelProfileAt(profile, now); err != nil {
+		t.Fatalf("first recovery attempt: %v", err)
+	}
+	if engine.tunnelRuntimeReady() {
+		t.Fatal("failed recovery report marked the tunnel ready")
+	}
+	if err := engine.updateTunnelProfileAt(profile, now); err != nil {
+		t.Fatalf("second recovery attempt: %v", err)
+	}
+	if !engine.tunnelRuntimeReady() || attempts != 2 {
+		t.Fatalf("recovery state ready=%t attempts=%d", engine.tunnelRuntimeReady(), attempts)
+	}
+	if err := engine.updateTunnelProfileAt(profile, now); err != nil {
+		t.Fatalf("deduped recovery: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("successful recovery repeated SyncMeta: %d", attempts)
 	}
 }
 
