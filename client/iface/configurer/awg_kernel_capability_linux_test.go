@@ -31,6 +31,11 @@ func TestParseAWGKernelCapabilities(t *testing.T) {
 	require.True(t, capabilities.SupportsPerPeerTransportMode())
 }
 
+func TestAWGKernelDeviceAttributeNumbersMatchUAPIV3(t *testing.T) {
+	require.Equal(t, uint16(33), awgKernelDeviceProfileRevision)
+	require.Equal(t, uint16(34), awgKernelDeviceCapabilities)
+}
+
 func TestParseAWGKernelCapabilitiesDefaultsToUnsupported(t *testing.T) {
 	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
 		Type: awgKernelDeviceIfName,

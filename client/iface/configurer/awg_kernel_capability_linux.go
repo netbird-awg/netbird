@@ -21,7 +21,7 @@ const (
 	awgKernelCommandSetDevice
 
 	awgKernelDeviceIfName       uint16 = 2
-	awgKernelDeviceCapabilities uint16 = 35
+	awgKernelDeviceCapabilities uint16 = 34
 
 	awgKernelCapabilityPerPeerTransportMode AWGKernelCapabilities = 1 << 0
 )
