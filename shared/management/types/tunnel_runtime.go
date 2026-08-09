@@ -24,20 +24,3 @@ func NormalizeTunnelRuntimeErrorCode(code string) string {
 		return TunnelRuntimeErrorMetadataInvalid
 	}
 }
-
-// NormalizeTunnelReadinessErrorCode returns an allowlisted aggregate code.
-func NormalizeTunnelReadinessErrorCode(code string) string {
-	switch code {
-	case TunnelRuntimeErrorClockSkew,
-		TunnelRuntimeErrorProfileInvalid,
-		TunnelRuntimeErrorMetadataInvalid,
-		TunnelRuntimeErrorMetadataIncomplete,
-		TunnelReadinessErrorAdapterIncompatible,
-		TunnelReadinessErrorProtocolMismatch,
-		TunnelReadinessErrorRevisionMismatch,
-		TunnelReadinessErrorNotReady:
-		return code
-	default:
-		return TunnelRuntimeErrorMetadataInvalid
-	}
-}

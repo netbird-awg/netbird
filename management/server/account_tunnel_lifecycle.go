@@ -65,18 +65,11 @@ func (am *DefaultAccountManager) getTunnelLifecycleWithClock(
 			return fmt.Errorf("get tunnel readiness peers: %w", err)
 		}
 		now := clock().UTC()
-		eligible, excludedOffline, incompatible := tunnelReadinessPeers(
-			peers,
-			settings.TunnelProfilePending,
-			now,
-		)
 		result = &managementtunnel.LifecycleResult{
 			Settings: settings,
-			Readiness: managementtunnel.EvaluateReadiness(
+			Readiness: evaluateTunnelReadiness(
+				peers,
 				settings.TunnelProfilePending,
-				eligible,
-				excludedOffline,
-				incompatible,
 				now,
 			),
 		}
@@ -182,16 +175,9 @@ func (am *DefaultAccountManager) updateTunnelLifecycleWithClock(
 			return fmt.Errorf("get tunnel readiness peers: %w", err)
 		}
 		now := clock().UTC()
-		eligible, excludedOffline, incompatible := tunnelReadinessPeers(
+		readiness := evaluateTunnelReadiness(
 			peers,
 			current.TunnelProfilePending,
-			now,
-		)
-		readiness := managementtunnel.EvaluateReadiness(
-			current.TunnelProfilePending,
-			eligible,
-			excludedOffline,
-			incompatible,
 			now,
 		)
 		updated, changed, err := managementtunnel.ApplyLifecycle(
@@ -222,25 +208,37 @@ func (am *DefaultAccountManager) updateTunnelLifecycleWithClock(
 				return err
 			}
 		}
-		eligible, excludedOffline, incompatible = tunnelReadinessPeers(
-			peers,
-			updated.TunnelProfilePending,
-			now,
-		)
 		result = &managementtunnel.LifecycleResult{
 			Settings: updated,
 			Changed:  changed,
-			Readiness: managementtunnel.EvaluateReadiness(
+			Readiness: evaluateTunnelReadiness(
+				peers,
 				updated.TunnelProfilePending,
-				eligible,
-				excludedOffline,
-				incompatible,
 				now,
 			),
 		}
 		return nil
 	})
 	return result, err
+}
+
+func evaluateTunnelReadiness(
+	peers []*nbpeer.Peer,
+	pending *types.TunnelProfile,
+	now time.Time,
+) managementtunnel.Readiness {
+	eligible, excludedOffline, incompatible := tunnelReadinessPeers(
+		peers,
+		pending,
+		now,
+	)
+	return managementtunnel.EvaluateReadiness(
+		pending,
+		eligible,
+		excludedOffline,
+		incompatible,
+		now,
+	)
 }
 
 func tunnelReadinessPeers(
