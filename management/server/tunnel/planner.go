@@ -332,10 +332,12 @@ func assignedProtocol(
 func adapterSupportsProtocol(adapterRevision, protocolVersion string) bool {
 	switch protocolVersion {
 	case clienttunnel.ProtocolAmneziaWG3:
-		return adapterRevision == HybridAWG3AdapterRevision
+		return adapterRevision == HybridAWG3AdapterRevision ||
+			adapterRevision == clienttunnel.KernelAdapterRevision
 	case clienttunnel.ProtocolAmneziaWG2:
 		return adapterRevision == HybridAWG2AdapterRevision ||
-			adapterRevision == HybridAWG3AdapterRevision
+			adapterRevision == HybridAWG3AdapterRevision ||
+			adapterRevision == clienttunnel.KernelAdapterRevision
 	default:
 		return false
 	}
