@@ -476,6 +476,8 @@ func randomHeaders(count int) ([]uint32, error) {
 		if err != nil {
 			return nil, fmt.Errorf("generate tunnel header: %w", err)
 		}
+		// #nosec G115 -- rand.Int's exclusive 2^32 upper bound guarantees
+		// the value fits uint32.
 		header := uint32(value.Uint64())
 		if header <= 4 {
 			continue
