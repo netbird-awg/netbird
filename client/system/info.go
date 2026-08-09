@@ -92,6 +92,7 @@ type Info struct {
 
 	SyncMessageVersion *int
 	TunnelRuntime      *TunnelRuntimeInfo
+	KernelAWGAvailable bool
 }
 
 func (i *Info) SetFlags(

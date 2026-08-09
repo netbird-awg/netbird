@@ -1036,6 +1036,12 @@ func peerCapabilities(info system.Info) []proto.PeerCapability {
 		caps = append(caps, proto.PeerCapability_PeerCapabilityIPv6Overlay)
 	}
 	caps = append(caps, hybridAWGCapabilities()...)
+	if info.KernelAWGAvailable {
+		caps = append(
+			caps,
+			proto.PeerCapability_PeerCapabilityKernelAmneziaWG,
+		)
+	}
 	return caps
 }
 
