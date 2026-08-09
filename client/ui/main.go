@@ -268,8 +268,8 @@ func newApplication(onSecondInstance func()) *application.App {
 		// installer pre-populates with the toast activator CLSID; otherwise
 		// toasts show under a different identity and the MSI's CustomActivator
 		// value is orphaned.
-		Name:        "Netibird-AWG",
-		Description: "Netibird-AWG desktop client",
+		Name:        "NetBird-AWG",
+		Description: "NetBird-AWG desktop client",
 		Icon:        appIcon,
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -349,7 +349,7 @@ func newMainWindow(app *application.App, prefStore *preferences.Store) *applicat
 	}
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:   "main",
-		Title:  "Netibird-AWG",
+		Title:  "NetBird-AWG",
 		Width:  initialWidth,
 		Height: services.WindowHeight,
 		// Center on first show; minimal WMs (fluxbox, the XEmbed tray path)

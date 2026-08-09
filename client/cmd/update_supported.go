@@ -18,7 +18,7 @@ import (
 var (
 	updateCmd = &cobra.Command{
 		Use:   "update",
-		Short: "Update the Netibird-AWG client application",
+		Short: "Update the NetBird-AWG client application",
 		RunE:  updateFunc,
 	}
 

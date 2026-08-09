@@ -25,7 +25,7 @@
 //  3. Downloads installer file from GitHub releases (if applicable)
 //  4. Verifies installer signature using reposign package (cryptographic verification in service process before
 //     launching updater)
-//  5. Copies the service binary to tempDir as the Netibird-AWG updater
+//  5. Copies the service binary to tempDir as the NetBird-AWG updater
 //  6. Launches updater process with detached mode:
 //     - --temp-dir: Temporary directory path
 //     - --service-dir: Service installation directory
@@ -50,7 +50,7 @@
 //     - macOS/Linux: netibird-awg service start
 //  7. Updater restarts UI:
 //     - Windows: Launches netibird-awg-ui.exe for the active console user
-//     - macOS: Uses launchctl asuser to launch Netibird-AWG.app
+//     - macOS: Uses launchctl asuser to launch NetBird-AWG.app
 //     - Linux: Not implemented (UI typically auto-starts)
 //  8. Updater writes result.json with success/error status
 //  9. Updater process exits

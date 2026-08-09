@@ -4,7 +4,7 @@ includes:
   common: ../Taskfile.yml
 
 vars:
-  APP_BUNDLE_NAME: "Netibird-AWG"
+  APP_BUNDLE_NAME: "NetBird-AWG"
   # Signing configuration - edit these values for your project
   # SIGN_IDENTITY: "Developer ID Application: Your Company (TEAMID)"
   # KEYCHAIN_PROFILE: "my-notarize-profile"

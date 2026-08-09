@@ -1,29 +1,29 @@
 {{ $projectName := env.Getenv "PROJECT" }}{{ $amdFilePath := env.Getenv "AMD" }}{{ $armFilePath := env.Getenv "ARM" }}
 {{ $amdURL := env.Getenv "AMD_URL" }}{{ $armURL := env.Getenv "ARM_URL" }}
 {{ $amdFile := filepath.Base $amdFilePath }}{{ $armFile := filepath.Base $armFilePath }}{{ $amdFileBytes := file.Read $amdFilePath }}
-{{ $armFileBytes := file.Read $armFilePath }}# Netibird-AWG UI Client Cask Formula
+{{ $armFileBytes := file.Read $armFilePath }}# NetBird-AWG UI Client Cask Formula
 cask "{{ $projectName }}" do
   version "{{ env.Getenv "VERSION" }}"
 
   if Hardware::CPU.intel?
       url "{{ $amdURL }}"
       sha256 "{{ crypto.SHA256 $amdFileBytes }}"
-      app "Netibird-AWG.app", target: "Netibird-AWG.app"
+      app "NetBird-AWG.app", target: "NetBird-AWG.app"
   else
       url "{{ $armURL }}"
       sha256 "{{ crypto.SHA256 $armFileBytes }}"
-      app "Netibird-AWG.app", target: "Netibird-AWG.app"
+      app "NetBird-AWG.app", target: "NetBird-AWG.app"
   end
 
   depends_on formula: "netibird-awg"
 
   postflight do
-    set_permissions "/Applications/Netibird-AWG.app/installer.sh", '0755'
-    set_permissions "/Applications/Netibird-AWG.app/uninstaller.sh", '0755'
+    set_permissions "/Applications/NetBird-AWG.app/installer.sh", '0755'
+    set_permissions "/Applications/NetBird-AWG.app/uninstaller.sh", '0755'
   end
 
   postflight do
-    system_command "#{appdir}/Netibird-AWG.app/installer.sh",
+    system_command "#{appdir}/NetBird-AWG.app/installer.sh",
                    args: ["#{version}"],
                    sudo: true
   end
@@ -38,7 +38,7 @@ cask "{{ $projectName }}" do
                    sudo: true
   end
 
-  name "Netibird-AWG UI"
-  desc "Netibird-AWG UI Client"
+  name "NetBird-AWG UI"
+  desc "NetBird-AWG UI Client"
   homepage "https://www.netbird.io/"
 end

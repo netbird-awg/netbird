@@ -5,9 +5,9 @@
         <key>CFBundlePackageType</key>
             <string>APPL</string>
         <key>CFBundleName</key>
-            <string>Netibird-AWG</string>
+            <string>NetBird-AWG</string>
         <key>CFBundleDisplayName</key>
-            <string>Netibird-AWG</string>
+            <string>NetBird-AWG</string>
         <key>CFBundleExecutable</key>
             <string>netibird-awg-ui</string>
         <key>CFBundleIdentifier</key>
