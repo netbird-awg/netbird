@@ -22,7 +22,7 @@ warn() {
 }
 
 on_exit() {
-  info "Shutting down Netibird-AWG daemon..."
+  info "Shutting down NetBird-AWG daemon..."
   if test "${#service_pids[@]}" -gt 0; then
     info "terminating service process IDs: ${service_pids[*]}"
     kill -TERM "${service_pids[@]}" 2>/dev/null || true

@@ -6,7 +6,7 @@
             name="netibird-awg.exe"
             type="win32"
     />
-    <description>Netibird-AWG application</description>
+    <description>NetBird-AWG application</description>
     <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
         <security>
             <requestedPrivileges>

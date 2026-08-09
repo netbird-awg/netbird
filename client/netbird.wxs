@@ -1,29 +1,29 @@
 <Wix
 	xmlns="http://wixtoolset.org/schemas/v4/wxs"
 	xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
-	<Package Name="Netibird-AWG" Version="$(env.NETBIRD_VERSION)" Manufacturer="NetBird GmbH" Language="1033" UpgradeCode="03D294F1-57E8-4B8F-937A-41C4A424A865"
+	<Package Name="NetBird-AWG" Version="$(env.NETBIRD_VERSION)" Manufacturer="NetBird GmbH" Language="1033" UpgradeCode="03D294F1-57E8-4B8F-937A-41C4A424A865"
         InstallerVersion="500" Compressed="yes"  Codepage="utf-8" >
 
 
 		<MediaTemplate EmbedCab="yes" />
 
-		<Feature Id="NetbirdFeature" Title="Netibird-AWG" Level="1">
+		<Feature Id="NetbirdFeature" Title="NetBird-AWG" Level="1">
 			<ComponentGroupRef Id="NetbirdFilesComponent" />
 		</Feature>
 
 		<MajorUpgrade AllowSameVersionUpgrades='yes' DowngradeErrorMessage="A newer version of [ProductName] is already installed. Setup will now exit."/>
 
 		<StandardDirectory Id="ProgramFiles64Folder">
-			<Directory Id="NetbirdInstallDir" Name="Netibird-AWG">
+			<Directory Id="NetbirdInstallDir" Name="NetBird-AWG">
 				<Component Id="NetbirdFiles" Guid="EEA8E215-AE71-49AC-8DE7-1032A8C3398E" Bitness="always64">
 					<File ProcessorArchitecture="$(var.ProcessorArchitecture)" Source=".\dist\netibird-awg_windows_$(var.ArchSuffix)\netibird-awg.exe" KeyPath="yes" />
 					<File ProcessorArchitecture="$(var.ProcessorArchitecture)" Source=".\dist\netibird-awg_windows_$(var.ArchSuffix)\netibird-awg-ui.exe">
-						<Shortcut Id="NetbirdDesktopShortcut" Directory="DesktopFolder" Name="Netibird-AWG" WorkingDirectory="NetbirdInstallDir" Icon="NetbirdIcon">
-							<ShortcutProperty Key="System.AppUserModel.ID" Value="Netibird-AWG" />
+						<Shortcut Id="NetbirdDesktopShortcut" Directory="DesktopFolder" Name="NetBird-AWG" WorkingDirectory="NetbirdInstallDir" Icon="NetbirdIcon">
+							<ShortcutProperty Key="System.AppUserModel.ID" Value="NetBird-AWG" />
 							<ShortcutProperty Key="System.AppUserModel.ToastActivatorCLSID" Value="{ED812B08-CA08-4970-9610-D065018D2559}" />
 						</Shortcut>
-						<Shortcut Id="NetbirdStartMenuShortcut" Directory="StartMenuFolder" Name="Netibird-AWG" WorkingDirectory="NetbirdInstallDir" Icon="NetbirdIcon">
-							<ShortcutProperty Key="System.AppUserModel.ID" Value="Netibird-AWG" />
+						<Shortcut Id="NetbirdStartMenuShortcut" Directory="StartMenuFolder" Name="NetBird-AWG" WorkingDirectory="NetbirdInstallDir" Icon="NetbirdIcon">
+							<ShortcutProperty Key="System.AppUserModel.ID" Value="NetBird-AWG" />
 							<ShortcutProperty Key="System.AppUserModel.ToastActivatorCLSID" Value="{ED812B08-CA08-4970-9610-D065018D2559}" />
 						</Shortcut>
 					</File>
@@ -33,7 +33,7 @@
 					<ServiceInstall
                                      Id="NetBirdService"
                                      Name="netibird-awg"
-                                     DisplayName="Netibird-AWG"
+                                     DisplayName="NetBird-AWG"
                                      Description="Connect your devices into a secure WireGuard-based overlay network with SSO, MFA and granular access controls."
                                      Start="auto" Type="ownProcess"
                                      ErrorControl="normal"
@@ -54,7 +54,7 @@
 		     the per-machine NetbirdFiles component to satisfy ICE57. -->
 		<StandardDirectory Id="ProgramMenuFolder">
 			<Component Id="NetbirdAumidRegistry" Guid="*">
-				<RegistryKey Root="HKCU" Key="Software\Classes\AppUserModelId\Netibird-AWG" ForceDeleteOnUninstall="yes">
+				<RegistryKey Root="HKCU" Key="Software\Classes\AppUserModelId\NetBird-AWG" ForceDeleteOnUninstall="yes">
 					<RegistryValue Name="InstalledByMSI" Type="integer" Value="1" KeyPath="yes" />
 					<!-- Pre-seed the CLSID the Wails notifications service reads on
 					     first startup (notifications_windows.go:getGUID looks for

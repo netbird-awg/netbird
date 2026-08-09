@@ -104,22 +104,22 @@ func (u *Installer) Setup(ctx context.Context, dryRun bool, installerFile string
 }
 
 func (u *Installer) startDaemon(daemonFolder string) error {
-	log.Infof("starting Netibird-AWG service")
+	log.Infof("starting NetBird-AWG service")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, filepath.Join(daemonFolder, daemonName), "service", "start")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Debugf("failed to start Netibird-AWG service: %v, output: %s", err, string(output))
+		log.Debugf("failed to start NetBird-AWG service: %v, output: %s", err, string(output))
 		return err
 	}
-	log.Infof("Netibird-AWG service started successfully")
+	log.Infof("NetBird-AWG service started successfully")
 	return nil
 }
 
 func (u *Installer) startUIAsUser(daemonFolder string) error {
 	uiPath := filepath.Join(daemonFolder, uiName)
-	log.Infof("starting Netibird-AWG UI: %s", uiPath)
+	log.Infof("starting NetBird-AWG UI: %s", uiPath)
 
 	// Get the active console session ID
 	sessionID := windows.WTSGetActiveConsoleSessionId()
@@ -197,7 +197,7 @@ func (u *Installer) startUIAsUser(daemonFolder string) error {
 		log.Warnf("failed to close thread handle: %v", err)
 	}
 
-	log.Infof("Netibird-AWG UI started successfully in session %d", sessionID)
+	log.Infof("NetBird-AWG UI started successfully in session %d", sessionID)
 	return nil
 }
 

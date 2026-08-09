@@ -1,4 +1,4 @@
-!define APP_NAME "Netibird-AWG"
+!define APP_NAME "NetBird-AWG"
 !define COMP_NAME "NetBird GmbH"
 !define WEB_SITE "github.com/netbird-awg/netbird"
 !define VERSION $%APPVER%
@@ -16,7 +16,7 @@
 !define REG_APP_PATH "Software\Microsoft\Windows\CurrentVersion\App Paths\${MAIN_APP_EXE}"
 !define UNINSTALL_PATH "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 
-!define UI_APP_NAME "Netibird-AWG UI"
+!define UI_APP_NAME "NetBird-AWG UI"
 !define UI_APP_EXE "netibird-awg-ui.exe"
 
 !define UI_REG_APP_PATH "Software\Microsoft\Windows\CurrentVersion\App Paths\${UI_APP_EXE}"
@@ -185,7 +185,7 @@ ${If} $R0 != ""
     # if silent install jump to uninstall step
     IfSilent uninstall
 
-    MessageBox MB_YESNO|MB_ICONQUESTION "Netibird-AWG is already installed and must be removed before continuing. Proceed?" IDNO done IDYES uninstall
+    MessageBox MB_YESNO|MB_ICONQUESTION "NetBird-AWG is already installed and must be removed before continuing. Proceed?" IDNO done IDYES uninstall
 
     uninstall:
       !insertmacro UninstallPreviousNSIS $R0 "/NoMsgBox"
@@ -292,12 +292,12 @@ SectionEnd
 Section Uninstall
 ${INSTALL_TYPE}
 
-DetailPrint "Stopping Netibird-AWG service..."
+DetailPrint "Stopping NetBird-AWG service..."
 ExecWait '"$INSTDIR\${MAIN_APP_EXE}" service stop'
-DetailPrint "Uninstalling Netibird-AWG service..."
+DetailPrint "Uninstalling NetBird-AWG service..."
 ExecWait '"$INSTDIR\${MAIN_APP_EXE}" service uninstall'
 
-DetailPrint "Terminating Netibird-AWG UI process..."
+DetailPrint "Terminating NetBird-AWG UI process..."
 ExecWait `taskkill /im ${UI_APP_EXE} /f`
 
 ; Remove autostart registry entries
@@ -310,14 +310,14 @@ DeleteRegValue HKCU "${AUTOSTART_REG_KEY}" "${APP_NAME}"
 ; Handle data deletion based on checkbox
 DetailPrint "Checking if user requested data deletion..."
 ${If} $DeleteDataEnabled == "1"
-    DetailPrint "User opted to delete Netibird-AWG data. Removing ${NETBIRD_DATA_DIR}..."
+    DetailPrint "User opted to delete NetBird-AWG data. Removing ${NETBIRD_DATA_DIR}..."
     ClearErrors
     RMDir /r "${NETBIRD_DATA_DIR}"
     IfErrors 0 +2 ; If no errors, jump over the message
-    DetailPrint "Error deleting Netibird-AWG data directory. It might be in use or already removed."
-    DetailPrint "Netibird-AWG data directory removal complete."
+    DetailPrint "Error deleting NetBird-AWG data directory. It might be in use or already removed."
+    DetailPrint "NetBird-AWG data directory removal complete."
 ${Else}
-    DetailPrint "User did not opt to delete Netibird-AWG data."
+    DetailPrint "User did not opt to delete NetBird-AWG data."
 ${EndIf}
 
 # wait the service uninstall take unblock the executable

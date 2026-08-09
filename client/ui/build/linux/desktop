@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
-Name=Netibird-AWG
-Comment=Netibird-AWG desktop client
+Name=NetBird-AWG
+Comment=NetBird-AWG desktop client
 # The Exec line includes %u to pass the URL to the application
 Exec=/usr/local/bin/netibird-awg-ui %u
 Terminal=false

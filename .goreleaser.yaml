@@ -213,11 +213,11 @@ archives:
     name_template: "netbird-idp-migrate_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 nfpms:
-  - maintainer: Netibird-AWG <dev@netbird.io>
-    description: Netibird-AWG client.
+  - maintainer: NetBird-AWG <dev@netbird.io>
+    description: NetBird-AWG client.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: Netibird-AWG
+    vendor: NetBird-AWG
     id: netibird_awg_deb
     package_name: netibird-awg
     bindir: /usr/bin
@@ -229,11 +229,11 @@ nfpms:
       postinstall: "release_files/post_install.sh"
       preremove: "release_files/pre_remove.sh"
 
-  - maintainer: Netibird-AWG <dev@netbird.io>
-    description: Netibird-AWG client.
+  - maintainer: NetBird-AWG <dev@netbird.io>
+    description: NetBird-AWG client.
     homepage: https://netbird.io/
     license: BSD-3-Clause
-    vendor: Netibird-AWG
+    vendor: NetBird-AWG
     id: netibird_awg_rpm
     package_name: netibird-awg
     bindir: /usr/bin
@@ -439,7 +439,7 @@ brews:
     commit_author:
       name: Netbird
       email: dev@netbird.io
-    description: Netibird-AWG client.
+    description: NetBird-AWG client.
     download_strategy: CurlDownloadStrategy
     homepage: https://netbird.io/
     license: "BSD3"
