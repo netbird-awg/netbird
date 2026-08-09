@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: client/test/json-socket-docker.sh [tcp|unix|both]
 
-Builds the Netibird-AWG client Docker image from the local source tree, starts
+Builds the NetBird-AWG client Docker image from the local source tree, starts
 `netibird-awg service run` in a container with --enable-json-socket, and verifies
 that the HTTP/JSON daemon gateway responds to Status requests.
 

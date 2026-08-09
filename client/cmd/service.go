@@ -20,7 +20,7 @@ import (
 
 var serviceCmd = &cobra.Command{
 	Use:   "service",
-	Short: "Manage the Netibird-AWG daemon service",
+	Short: "Manage the NetBird-AWG daemon service",
 }
 
 const defaultJSONSocket = "unix:///var/run/netbird-http.sock"
@@ -58,7 +58,7 @@ func init() {
 	serviceCmd.PersistentFlags().BoolVar(&enableJSONSocket, "enable-json-socket", false, "Enables the HTTP/JSON API socket served by grpc-gateway. To persist, use: netibird-awg service install --enable-json-socket")
 	serviceCmd.PersistentFlags().StringVar(&jsonSocket, "json-socket", defaultJSONSocket, "HTTP/JSON API socket address [unix|tcp]://[path|host:port]. Requires --enable-json-socket to serve. To persist, use: netibird-awg service install --enable-json-socket --json-socket")
 
-	rootCmd.PersistentFlags().StringVarP(&serviceName, "service", "s", defaultServiceName, "Netibird-AWG system service name")
+	rootCmd.PersistentFlags().StringVarP(&serviceName, "service", "s", defaultServiceName, "NetBird-AWG system service name")
 	serviceEnvDesc := `Sets extra environment variables for the service. ` +
 		`You can specify a comma-separated list of KEY=VALUE pairs. ` +
 		`New keys are merged with previously saved env vars; existing keys are overwritten. ` +
@@ -79,8 +79,8 @@ func newProgram(ctx context.Context, cancel context.CancelFunc) *program {
 func newSVCConfig() (*service.Config, error) {
 	config := &service.Config{
 		Name:        serviceName,
-		DisplayName: "Netibird-AWG",
-		Description: "Netibird-AWG mesh network client",
+		DisplayName: "NetBird-AWG",
+		Description: "NetBird-AWG mesh network client",
 		Option:      make(service.KeyValue),
 		EnvVars:     make(map[string]string),
 	}

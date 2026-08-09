@@ -13,12 +13,12 @@
         InstallLocation="C:\Program Files\NetBird\NetBird">
     </Installer>
     <PackageInformation
-        PackageName="Netibird-AWG"
-        PackageDisplayName="Netibird-AWG"
+        PackageName="NetBird-AWG"
+        PackageDisplayName="NetBird-AWG"
         PublisherName="CN=NetBird"
-        PublisherDisplayName="Netibird-AWG"
+        PublisherDisplayName="NetBird-AWG"
         Version="0.0.1.0"
-        PackageDescription="Netibird-AWG desktop client">
+        PackageDescription="NetBird-AWG desktop client">
         <Capabilities>
             <Capability Name="runFullTrust" />
             
@@ -26,8 +26,8 @@
         <Applications>
             <Application
                 Id="io.netbird-awg.client"
-                Description="Netibird-AWG desktop client"
-                DisplayName="Netibird-AWG"
+                Description="NetBird-AWG desktop client"
+                DisplayName="NetBird-AWG"
                 ExecutableName="netibird-awg-ui"
                 EntryPoint="Windows.FullTrustApplication">
                 
@@ -41,9 +41,9 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>Netibird-AWG</DisplayName>
-            <PublisherDisplayName>Netibird-AWG</PublisherDisplayName>
-            <Description>Netibird-AWG desktop client</Description>
+            <DisplayName>NetBird-AWG</DisplayName>
+            <PublisherDisplayName>NetBird-AWG</PublisherDisplayName>
+            <Description>NetBird-AWG desktop client</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>

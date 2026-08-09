@@ -41,8 +41,8 @@ func init() {
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Log in to the Netibird-AWG network",
-	Long:  "Log in to the Netibird-AWG network using a setup key or SSO",
+	Short: "Log in to the NetBird-AWG network",
+	Long:  "Log in to the NetBird-AWG network using a setup key or SSO",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := setEnvAndFlags(cmd); err != nil {
 			return fmt.Errorf("set env and flags: %v", err)
