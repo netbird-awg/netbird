@@ -74,7 +74,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/go-secure-stdlib/base62 v0.1.2
 	github.com/hashicorp/go-version v1.7.0
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/libdns/route53 v1.5.0
 	github.com/libp2p/go-nat v0.2.0
 	github.com/libp2p/go-netroute v0.4.0
@@ -140,10 +140,10 @@ require (
 	google.golang.org/api v0.276.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478
 	gopkg.in/yaml.v3 v3.0.1
-	gorm.io/driver/mysql v1.5.7
-	gorm.io/driver/postgres v1.5.7
-	gorm.io/driver/sqlite v1.5.7
-	gorm.io/gorm v1.25.12
+	gorm.io/driver/mysql v1.6.0
+	gorm.io/driver/postgres v1.6.2
+	gorm.io/driver/sqlite v1.6.0
+	gorm.io/gorm v1.31.2
 	gvisor.dev/gvisor v0.0.0-20260219192049-0f2374377e89
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
 )
