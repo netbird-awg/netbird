@@ -116,7 +116,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0
 	github.com/things-go/go-socks5 v0.0.4
 	github.com/ti-mo/conntrack v0.5.1
-	github.com/ti-mo/netfilter v0.5.2
+	github.com/ti-mo/netfilter v0.5.3
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/wailsapp/wails/v3 v3.0.0-beta.3
 	github.com/yusufpapurcu/wmi v1.2.4
